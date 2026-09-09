@@ -214,7 +214,7 @@ jobs:
       # 安装内核编译所需的各种工具和库（使用 apt 缓存加速）
       - name: 安装编译依赖
         run: |
-        sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y ccache python3 git curl build-essential libssl-dev bison flex libelf-dev dwarves
 
