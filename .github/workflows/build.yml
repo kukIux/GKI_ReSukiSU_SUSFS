@@ -1671,4 +1671,4 @@ jobs:
           name: ${{ env.BUILD_VARIANT }}_kernel-${{ env.CONFIG }}-Rejects
           path: patch-rejects/
           if-no-files-found: ignore
-          compression-level: 0
+          compression-level: 9
