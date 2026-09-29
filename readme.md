@@ -1,121 +1,119 @@
 <div align="center">
 
-# GKI KernelSU SUSFS
-### 专为ReSukiSU打造的自动构建仓库
+# GKI ReSukiSU SUSFS
 
-**自动化构建 GKI 内核 | 集成 ReSukiSU + SUSFS**
+基于 GitHub Actions 构建 Android GKI 内核，集成 ReSukiSU 与 SUSFS。
 
-[![Release](https://img.shields.io/github/v/release/coolzyd9107/GKI_ReSukiSU_SUSFS?label=Release&style=flat-square&logo=github&logoColor=white&color=2ea44f)](https://github.com/coolzyd9107/GKI_KernelSU_SUSFS/releases)
+[![Release](https://img.shields.io/github/v/release/coolzyd9107/GKI_ReSukiSU_SUSFS?label=Release&style=flat-square&logo=github&logoColor=white&color=2ea44f)](https://github.com/coolzyd9107/GKI_ReSukiSU_SUSFS/releases)
+[![构建内核](https://github.com/coolzyd9107/GKI_ReSukiSU_SUSFS/actions/workflows/main.yml/badge.svg)](https://github.com/coolzyd9107/GKI_ReSukiSU_SUSFS/actions/workflows/main.yml)
 [![Telegram](https://img.shields.io/static/v1?label=Telegram&message=Channel&color=0088cc)](https://t.me/ReSukiSUKernelBuilds)
-[![ReSukiSU](https://img.shields.io/badge/ReSukiSU-Supported-5AA300?style=flat-square)](https://kernelsu.org/)
-[![SUSFS](https://img.shields.io/badge/SUSFS-Integrated-E67E22?style=flat-square)](https://gitlab.com/simonpunk/susfs4ksu)
-
----
+[![ReSukiSU](https://img.shields.io/badge/KernelSU-ReSukiSU-5AA300?style=flat-square)](https://github.com/ReSukiSU/ReSukiSU)
+[![SUSFS](https://img.shields.io/badge/Filesystem-SUSFS-E67E22?style=flat-square)](https://gitlab.com/simonpunk/susfs4ksu)
 
 </div>
 
-## ⚠️ 仓库须知
+## 项目说明
 
-① 本仓库分叉自 [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS/) 本人只进行了部分修改与问题修复，请各位使用者优先考虑分叉原始仓库。
+本仓库提供 Actions 云端构建流程，按 Android GKI KMI 和安全补丁级别生成 AnyKernel3 安装包。常规构建使用 ReSukiSU；也可以选择 Clean build，生成不集成 KernelSU、SUSFS 与可选功能补丁的内核。
 
-② 本仓库仅支持构建包含ReSukiSU的内核，对其它KernelSU分支的内核构建支持现已彻底移除，如需构建包含其他KernelSU分支的内核，请分叉上游仓库 [zzh20188/GKI_KernelSU_SUSFS](https://github.com/zzh20188/GKI_KernelSU_SUSFS/) 然后自行构建。
+内核版本与发布修订从 `data/android*/` 下的 JSON 矩阵读取，并由数据同步工作流定期更新。
 
-## 💰 特别鸣谢
+## 支持的 KMI
 
-[coolzyd9107](https://github.com/coolzyd9107)：仓库的创建者和所有者，但他是一个大fèiwù，很多东西都不会。
+| Android KMI | 内核系列 | 主工作流开关 |
+|---|---|---|
+| Android 12 | 5.10 | `build_a12_5_10` |
+| Android 13 | 5.10 | `build_a13_5_10` |
+| Android 13 | 5.15 | `build_a13_5_15` |
+| Android 14 | 5.15 | `build_a14_5_15` |
+| Android 14 | 6.1 | `build_a14_6_1` |
+| Android 15 | 6.6 | `build_a15_6_6` |
+| Android 16 | 6.12 | `build_a16_6_12` |
 
-[zzh20188](https://github.com/zzh20188)：他是本仓库的上游仓库作者。
+5.10 和 5.15 都对应多个 Android KMI。尤其 5.15 的 Android 13 与 Android 14 存在相同的内核版本号，不能仅凭 `5.15.xxx` 自动判断 KMI；指定版本构建时必须手动选择对应的 Android 版本。
 
-[zhuzhuzihan](https://github.com/zhuzhuzihan)：协助进行了大量修复和修改，同时为我们的Telegram Bot提供服务器(仓库所有者真的太穷了，租不起)，我们的Telegram Bot的主要开发者。
+## 运行构建
 
-[TanakaLun](https://github.com/TanakaLun)：协助进行了大量修复和修改。
+1. 打开仓库的 [Actions](https://github.com/coolzyd9107/GKI_ReSukiSU_SUSFS/actions) 页面，选择 **构建内核** 工作流并点击 **Run workflow**。
+2. `build_all` 默认开启，会构建上表中的全部 KMI。只构建部分目标时，先关闭 `build_all`，再勾选需要的版本开关。
+3. 根据需要设置功能选项和 `release_type`，然后启动工作流。
+4. 构建完成后，在运行详情页的 **Artifacts** 下载产物；创建 Release 时也可以从 Release 页面下载。
 
-[YC酱luyancib](https://github.com/luyanci): 协助开发Telegram Bot，提供部分构建工作流程修复思路和Bot开发思路。
+### 按内核版本筛选
 
-[AlexLiuDev233](https://github.com/AlexLiuDev233): 协助修复构建工作流程存在的问题。
+启用 `build_kernel_version` 后，版本筛选优先于普通版本开关。`kernel_version_filter` 接受完整版本或系列通配符：
 
-[cctv18](https://github.com/cctv18): 协助修复构建工作流程存在的问题，为添加6.12内核构建支持提供部分思路，为修复一些SUSFS导致的问题提供思路。
+| 输入 | 作用 |
+|---|---|
+| `6.6.66` | 从对应 KMI 的版本数据中构建 `6.6.66` |
+| `6.6.X` 或 `6.6.x` | 构建该 KMI 数据中所有 6.6 子版本 |
 
-注:带*号的username表示该协作者的github账户处于不可见状态
+选择规则：
 
----
+- 5.10：`kernel_android_version` 必须选 `android12` 或 `android13`。
+- 5.15：必须选 `android13` 或 `android14`。
+- 6.1、6.6、6.12：工作流分别使用 Android 14、15、16 的 KMI，无需手动选择。
 
-## ⚠️ 重要更新日志
+补丁级别、发布 revision 和 LTS 版本由对应 JSON 数据读取。指定版本构建不会创建 GitHub Release，即使 `release_type` 选择了预发布或正式发布。
 
-> **注意：** 目前不支持一加 ColorOS 14、15，刷入后可能需要清除数据开机。
+### 发布类型
 
-> **ReSukiSU：ReSukiSU更新比SukiSU勤快，SukiSU报错就试试ReSukiSU**
->
-> **默认变体已切换为 ReSukiSU**
+普通版本构建的 `release_type` 有以下选项：
 
-> **Android 16：已支持 Android 16 - 6.12 内核版本**
->
-> **自本仓库的提交#c17aae5起我们已彻底移除对除ReSukiSU以外的KernelSU变体的内核构建支持，如果你出于某种原因更喜欢使用其他KernelSU变体的管理器，你完全不必担心，我们启用了muti-manager (内核中的KernelSU驱动程序仍是ReSukiSU，但支持使用其它大部分KernelSU变体的管理器进行管理，例如KowSU和SukiSU-Ultra的管理器) ，这样你就可以直接使用其他KernelSU变体的管理器，但请务必记住，如果你要反馈问题，请使用ReSukiSU管理器提交日志信息**
+- `Actions`：仅保留 Actions 运行产物，不创建 Release。默认值。
+- `Pre-Release`：在本仓库构建成功后创建预发布。
+- `Release`：在本仓库构建成功后创建正式发布。
 
-> **rekernel功能（测试）：已支持 rekernel 功能（目前处于测试阶段）**
+Fork 仓库只生成 Actions 产物，不会向上游仓库发布 Release。
 
-> **全部GKI编译工作流已从在工作流文件中硬编码GKI版本号迁移至json读取以方便后续同步GKI版本号，避免发布release时缺少最新或近期更新发布的GKI版本**
+## ReSukiSU 分支
 
-## 🧪 Bypass 内核构建（可选）
+`kernelsu_branch` 留空时使用 `main`。也可以填写 ReSukiSU 的远程分支名，或完整的 40 位 commit SHA。工作流会在构建开始时解析并固定该分支对应的提交，因此同一次运行的各个 KMI 使用相同代码；发布说明会链接到实际构建的 ReSukiSU 提交。
 
-手动触发构建时可启用 `build_bypass`。该选项默认关闭；启用后每个目标会连续构建普通内核和 Bypass 内核，并将两份 `Image` 放入同一个 AnyKernel3 压缩包：
-
-- 普通模式使用 `Image`，作为默认推荐选项。
-- Bypass 模式使用 `Bypass-Image`，仅用于内核模块版本兼容性问题，不用于绕过 root 检测。
-- 刷入时按提示使用音量键选择模式：音量减选择普通模式，音量加选择 Bypass 模式。
-
-启用该选项会进行第二次完整编译，因此构建时间和磁盘占用会增加。只有在普通内核因模块兼容性问题无法启动时才应尝试 Bypass 模式。
-
----
-
-## 🧪 Droidspaces 容器支持（实验性）
-
-> **实验性功能：** 不保证所有 GKI 版本均能成功构建或启动，刷入前请务必备份 Boot 镜像。
->
-> **TIPS：** 工作流使用的是 [Droidspaces](https://github.com/ravindu644/Droidspaces-OSS) 的 [官方补丁](https://github.com/ravindu644/Droidspaces-OSS/tree/main/Documentation/resources/kernel-patches/GKI) ，如有更好的补丁可以提个issues，此外由于存在三个补丁，或许需要反复试验以确保其中一个适配你的机型，请根据他人或实际经验来选择。
-
-[Droidspaces](https://github.com/ravindu644/Droidspaces-OSS) 是一个轻量级的 Linux 容器工具，可以在 Android 上运行完整的 Linux 环境（支持 systemd、OpenRC 等），用于搭建开发环境、运行服务器等场景。
-
-**支持范围：** 5.10 / 5.15 / 6.1 / 6.6 / 6.12
-
-**使用方式：** 在手动触发构建时，选择 `Droidspaces 容器支持` 选项：
+## 可选构建功能
 
 | 选项 | 说明 |
-|:---:|:---|
-| `off` | 关闭（默认） |
-| `678` | 使用 6_7_8 槽位补丁（推荐） |
-| `123` | 使用 1_2_3 槽位补丁（备用） |
-| `345` | 使用 3_4_5 槽位补丁（备用） |
+|---|---|
+| `clean_build` | 不集成 ReSukiSU、SUSFS 及可选功能补丁。 |
+| `cancel_susfs` | 关闭 SUSFS 集成。默认启用 SUSFS。 |
+| `use_zram` | 启用 ZRAM 增强（LZ4KD）。 |
+| `use_bbg` | 启用 BBG 防格机补丁。 |
+| `use_rekernel` | 启用 Re-Kernel 驱动，功能仍在测试。 |
+| `cve_2026_43499_patch` | 应用 CVE-2026-43499 修复链，默认开启。 |
+| `build_bypass` | 额外构建 Bypass Image，与普通 Image 一起放入安装包。 |
+| `droidspaces` | 选择 Droidspaces 容器补丁：`off`、`678`、`123` 或 `345`。 |
+| `droidspaces_ntsync` | 在支持的组合中启用 NTSync，需同时启用 Droidspaces。 |
 
-> **提示：** 6.12 内核仅有一个补丁，选择任意非关闭选项即可。
+Bypass 模式用于排查内核模块版本兼容问题，不用于绕过 root 检测。启用后会进行第二次完整编译，并增加构建时间。刷入时按安装脚本提示选择普通 Image 或 Bypass Image。
 
-**如果构建失败或刷入后 bootloop：** 可尝试切换到其他槽位补丁（如 678 → 123 或 345），不同内核子版本可能适用不同的补丁。
+Droidspaces 补丁具有实验性，不同设备和内核版本可能需要尝试不同槽位。Android 16 / 6.12 只有一种槽位补丁，选任一非 `off` 值即可。上游没有 Android 14 / 5.15 的 NTSync 兼容补丁；该组合启用 NTSync 会明确使构建失败，请保持关闭。
 
----
+## 构建产物
 
-## 🧪 伪装 `/proc/config.gz`（Stock Config）
+产物名称包含 Android KMI、完整内核版本和 OS 安全补丁级别；存在上游 revision 时还会带上 revision。例如：
 
-这是一个进阶技巧，不需要在工作流里手动开关。  
-构建时会自动检测 `config/stock_defconfig` 是否存在：存在则应用，不存在则跳过。
+```text
+android14-5.15.148-2024-05-r25-ReSukiSU-AnyKernel3.zip
+```
 
-使用方法：
-1. 确保设备当前是官方 ROM + 官方内核。
-2. 获取设备上的 `/proc/config.gz`（可在手机端或电脑端操作）。
-3. 解压后重命名为 `stock_defconfig`，上传到仓库 [`config/`](config/) 目录并提交（可直接在手机端完成）。
+启用 Bypass 后，安装包中同时包含普通 `Image` 和 `Bypass-Image`。选择与设备 Android KMI、内核分支相符的产物；刷入前备份原厂 Boot 镜像，并确保设备有可用的恢复方式。
 
-构建流程会自动：
-- 复制到内核源码：`$KERNEL_ROOT/common/arch/arm64/configs/stock_defconfig`
-- 在 `$KERNEL_ROOT/common/kernel/Makefile` 中将 `$(obj)/config_data` 规则从 `$(KCONFIG_CONFIG)` 切换为 `arch/arm64/configs/stock_defconfig`
-- 使编译产物中的 `/proc/config.gz` 更贴近你的官方内核配置
+## Stock Config
 
----
+若仓库中存在 `config/stock_defconfig`，构建会自动将其用于 `/proc/config.gz` 配置伪装；文件不存在时跳过此步骤。可以从设备当前官方内核取得 `/proc/config.gz`，解压后放入该目录并命名为 `stock_defconfig`。
 
-<div align="center">
+## GKI 数据同步
 
-**更多内容持续更新中...**
+[更新 GKI 版本数据](.github/workflows/update-gki-data.yml)工作流每周一 UTC 08:00 自动运行，也可以手动触发。工作流会运行同步测试、更新 JSON、验证构建矩阵，并提交数据变更。
 
-⭐ 如果这个项目对你有帮助，请点个 Star 支持一下！
+## 致谢
 
-⭐ 新预构建发布通知/重大变更通知请关注我们的[Telegram频道](https://t.me/ReSukiSUKernelBuilds)
+- [zzh20188](https://github.com/zzh20188)：曾经的上游 GKI 构建仓库作者，目前此仓库已脱离分支网络，zzh20188/GKI_KernelSU_SUSFS 将不再是此仓库的上游仓库
+- [coolzyd9107](https://github.com/coolzyd9107)：本仓库维护者。
+- [zhuzhuzihan](https://github.com/zhuzhuzihan)：工作流修复及 Telegram Bot 开发与维护。
+- [TanakaLun](https://github.com/TanakaLun)：工作流修复与功能改进。
+- [YC酱luyancib](https://github.com/luyanci)：Telegram Bot 与构建流程建议。
+- [AlexLiuDev233](https://github.com/AlexLiuDev233)：工作流问题修复。
+- [cctv18](https://github.com/cctv18)：工作流、6.12 支持及 SUSFS 问题修复建议。
 
-</div>
+新构建和重要变更通知见 [Telegram 频道](https://t.me/ReSukiSUKernelBuilds)。
