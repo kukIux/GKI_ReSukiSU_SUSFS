@@ -104,8 +104,16 @@ on:
         description: "Android 12 - 5.10"
         type: boolean
         default: false
+      build_a13_5_10:
+        description: "Android 13 - 5.10"
+        type: boolean
+        default: false
       build_a13_5_15:
         description: "Android 13 - 5.15"
+        type: boolean
+        default: false
+      build_a14_5_15:
+        description: "Android 14 - 5.15"
         type: boolean
         default: false
       build_a14_6_1:
@@ -124,13 +132,26 @@ on:
         description: "构建全部版本"
         type: boolean
         default: true
-
-      # ==================== Bot-Push 选项 ====================
-      commit:
-        description: "Commit (sha 或描述)"
+      build_kernel_version:
+        description: "按内核版本及所选 KMI 构建（优先于上方版本选择）"
+        type: boolean
+        default: false
+      kernel_version_filter:
+        description: "内核版本，如 6.6.66 或 6.6.X（X 不区分大小写，以 X 结尾时则构建该内核大版本的所有子版本）"
         type: string
         default: ""
         required: false
+      kernel_android_version:
+        description: "构建 5.10/5.15 时选择 Android KMI；6.1 及以上保持 auto"
+        type: choice
+        options:
+          - auto
+          - android12
+          - android13
+          - android14
+        default: auto
+
+      # ==================== Bot-Push 选项 ====================
       change_log:
         description: "Change Log (可选，支持多行)"
         type: string
@@ -138,14 +159,141 @@ on:
         required: false
 
 jobs:
+  resolve-ksu-ref:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - name: 固定 ReSukiSU 构建提交
+        id: resolve
+        if: inputs.clean_build != true
+        env:
+          KSU_BRANCH: ${{ inputs.kernelsu_branch || 'main' }}
+        run: |
+          set -euo pipefail
+          if [[ "$KSU_BRANCH" =~ ^[a-fA-F0-9]{40}$ ]]; then
+            sha="${KSU_BRANCH,,}"
+          else
+            git check-ref-format --branch "$KSU_BRANCH"
+            sha=$(git ls-remote --heads https://github.com/ReSukiSU/ReSukiSU.git "refs/heads/$KSU_BRANCH" | awk '{ print $1 }')
+          fi
+          if [[ ! "$sha" =~ ^[a-fA-F0-9]{40}$ ]]; then
+            echo "::error::找不到 ReSukiSU 分支或提交: $KSU_BRANCH"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  select-kernel-version:
+    if: inputs.build_kernel_version
+    runs-on: ubuntu-latest
+    outputs:
+      data_file: ${{ steps.select.outputs.data_file }}
+      deduplicate_sublevels: ${{ steps.select.outputs.deduplicate_sublevels }}
+    steps:
+      - name: 定位内核版本数据
+        id: select
+        env:
+          KERNEL_FILTER: ${{ inputs.kernel_version_filter }}
+          ANDROID_CHOICE: ${{ inputs.kernel_android_version }}
+        run: |
+          if [[ ! "$KERNEL_FILTER" =~ ^([0-9]+\.[0-9]+)\.([0-9]+|[xX])$ ]]; then
+            echo "::error::内核版本格式应为 6.6.66 或 6.6.X"
+            exit 1
+          fi
+          kernel_series="${BASH_REMATCH[1]}"
+          case "$kernel_series" in
+            5.10)
+              if [[ "$ANDROID_CHOICE" != android12 && "$ANDROID_CHOICE" != android13 ]]; then
+                echo "::error::5.10 有 Android 12 和 13 两个 KMI，请明确选择 android12 或 android13"
+                exit 1
+              fi
+              deduplicate=false ;;
+            5.15)
+              if [[ "$ANDROID_CHOICE" != android13 && "$ANDROID_CHOICE" != android14 ]]; then
+                echo "::error::5.15 有 Android 13 和 14 两个 KMI，请明确选择 android13 或 android14"
+                exit 1
+              fi
+              deduplicate=true ;;
+            6.1) android_version=android14; deduplicate=true ;;
+            6.6) android_version=android15; deduplicate=true ;;
+            6.12) android_version=android16; deduplicate=true ;;
+            *) echo "::error::不支持的内核系列: ${BASH_REMATCH[1]}"; exit 1 ;;
+          esac
+          if [[ "$kernel_series" == 5.10 || "$kernel_series" == 5.15 ]]; then
+            data_file="data/$ANDROID_CHOICE/$kernel_series.json"
+          else
+            data_file="data/$android_version/$kernel_series.json"
+          fi
+          echo "data_file=$data_file" >> "$GITHUB_OUTPUT"
+          echo "deduplicate_sublevels=$deduplicate" >> "$GITHUB_OUTPUT"
+
+  prepare-selected-matrix:
+    needs: select-kernel-version
+    uses: ./.github/workflows/prepare-matrix.yml
+    with:
+      data_file: ${{ needs.select-kernel-version.outputs.data_file }}
+      deduplicate_sublevels: ${{ needs.select-kernel-version.outputs.deduplicate_sublevels == 'true' }}
+      kernel_filter: ${{ inputs.kernel_version_filter }}
+
+  build-selected-kernels:
+    needs: [prepare-selected-matrix, resolve-ksu-ref]
+    name: "${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.android_version }}-${{ matrix.os_patch_level }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.prepare-selected-matrix.outputs.matrix) }}
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      clean_build: ${{ inputs.clean_build }}
+      android_version: ${{ matrix.android_version }}
+      kernel_version: ${{ matrix.kernel_version }}
+      sub_level: ${{ matrix.sub_level }}
+      os_patch_level: ${{ matrix.os_patch_level }}
+      revision: ${{ matrix.revision || '' }}
+      ksu_variant: ${{ inputs.clean_build && 'Clean' || 'ReSukiSU' }}
+      ksu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
+      version: ${{ inputs.version || '' }}
+      build_time: ${{ inputs.build_time || '' }}
+      use_zram: ${{ inputs.use_zram }}
+      use_bbg: ${{ inputs.use_bbg }}
+      use_rekernel: ${{ inputs.use_rekernel || false }}
+      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
+      supp_op: false
+      enable_susfs: ${{ !inputs.cancel_susfs }}
+      droidspaces: ${{ inputs.droidspaces || 'off' }}
+      droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
+      build_bypass: ${{ inputs.build_bypass || false }}
+
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
-    if: inputs.build_a12_5_10 || inputs.build_all
+    if: ${{ !inputs.build_kernel_version && (inputs.build_a12_5_10 || inputs.build_all) }}
+    needs: resolve-ksu-ref
     uses: ./.github/workflows/kernel-a12-5-10.yml
     secrets: inherit
     with:
       clean_build: ${{ inputs.clean_build }}
-      kernelsu_branch: ${{ inputs.kernelsu_branch }}
+      kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
+      version: ${{ inputs.version }}
+      build_time: ${{ inputs.build_time || '' }}
+      use_zram: ${{ inputs.use_zram }}
+      use_bbg: ${{ inputs.use_bbg }}
+      use_rekernel: ${{ inputs.use_rekernel }}
+      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
+      cancel_susfs: ${{ inputs.cancel_susfs }}
+      droidspaces: ${{ inputs.droidspaces }}
+      droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
+      build_bypass: ${{ inputs.build_bypass }}
+
+  # ==================== Android 13 - 5.10 构建 ====================
+  build-a13-5-10:
+    if: ${{ !inputs.build_kernel_version && (inputs.build_a13_5_10 || inputs.build_all) }}
+    needs: resolve-ksu-ref
+    uses: ./.github/workflows/kernel-a13-5-10.yml
+    secrets: inherit
+    with:
+      clean_build: ${{ inputs.clean_build }}
+      kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
@@ -159,12 +307,34 @@ jobs:
 
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
-    if: inputs.build_a13_5_15 || inputs.build_all
+    if: ${{ !inputs.build_kernel_version && (inputs.build_a13_5_15 || inputs.build_all) }}
+    needs: resolve-ksu-ref
     uses: ./.github/workflows/kernel-a13-5-15.yml
     secrets: inherit
     with:
       clean_build: ${{ inputs.clean_build }}
-      kernelsu_branch: ${{ inputs.kernelsu_branch }}
+      kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
+      version: ${{ inputs.version }}
+      build_time: ${{ inputs.build_time || '' }}
+      use_zram: ${{ inputs.use_zram }}
+      use_bbg: ${{ inputs.use_bbg }}
+      use_rekernel: ${{ inputs.use_rekernel }}
+      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
+      cancel_susfs: ${{ inputs.cancel_susfs }}
+      droidspaces: ${{ inputs.droidspaces }}
+      droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
+      build_bypass: ${{ inputs.build_bypass }}
+
+  # ==================== Android 14 - 5.15 构建 ====================
+  build-a14-5-15:
+    if: ${{ !inputs.build_kernel_version && (inputs.build_a14_5_15 || inputs.build_all) }}
+    needs: resolve-ksu-ref
+    uses: ./.github/workflows/kernel-a13-5-15.yml
+    secrets: inherit
+    with:
+      android_version: android14
+      clean_build: ${{ inputs.clean_build }}
+      kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
@@ -178,12 +348,13 @@ jobs:
 
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
-    if: inputs.build_a14_6_1 || inputs.build_all
+    if: ${{ !inputs.build_kernel_version && (inputs.build_a14_6_1 || inputs.build_all) }}
+    needs: resolve-ksu-ref
     uses: ./.github/workflows/kernel-a14-6-1.yml
     secrets: inherit
     with:
       clean_build: ${{ inputs.clean_build }}
-      kernelsu_branch: ${{ inputs.kernelsu_branch }}
+      kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
@@ -197,12 +368,13 @@ jobs:
 
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
-    if: inputs.build_a15_6_6 || inputs.build_all
+    if: ${{ !inputs.build_kernel_version && (inputs.build_a15_6_6 || inputs.build_all) }}
+    needs: resolve-ksu-ref
     uses: ./.github/workflows/kernel-a15-6-6.yml
     secrets: inherit
     with:
       clean_build: ${{ inputs.clean_build }}
-      kernelsu_branch: ${{ inputs.kernelsu_branch }}
+      kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
@@ -216,12 +388,13 @@ jobs:
 
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
-    if: inputs.build_a16_6_12 || inputs.build_all
+    if: ${{ !inputs.build_kernel_version && (inputs.build_a16_6_12 || inputs.build_all) }}
+    needs: resolve-ksu-ref
     uses: ./.github/workflows/kernel-a16-6-12.yml
     secrets: inherit
     with:
       clean_build: ${{ inputs.clean_build }}
-      kernelsu_branch: ${{ inputs.kernelsu_branch }}
+      kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
@@ -239,8 +412,11 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     needs:
+      - build-selected-kernels
       - build-a12-5-10
+      - build-a13-5-10
       - build-a13-5-15
+      - build-a14-5-15
       - build-a14-6-1
       - build-a15-6-6
       - build-a16-6-12
@@ -276,14 +452,17 @@ jobs:
   # 当 release_type 不是 Actions 时，创建 GitHub Release
   # 仅限原仓库运行，fork 仓库跳过此步骤
   release:
-    if: ${{ always() && !cancelled() && inputs.release_type != 'Actions' && github.repository == 'coolzyd9107/GKI_ReSukiSU_SUSFS' }}
+    if: ${{ always() && !cancelled() && needs.resolve-ksu-ref.result == 'success' && !inputs.build_kernel_version && inputs.release_type != 'Actions' && github.repository == 'coolzyd9107/GKI_ReSukiSU_SUSFS' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
       actions: write
     needs:
+      - resolve-ksu-ref
       - build-a12-5-10
+      - build-a13-5-10
       - build-a13-5-15
+      - build-a14-5-15
       - build-a14-6-1
       - build-a15-6-6
       - build-a16-6-12
@@ -328,11 +507,7 @@ jobs:
               echo "MOUNT_TYPE=-> Magic Mount 支持" >> "$GITHUB_ENV"
             fi
 
-            if [ -n "${{ inputs.kernelsu_branch }}" ]; then
-              echo "BRANCH_INFO=(${{ inputs.kernelsu_branch }})" >> "$GITHUB_ENV"
-            else
-              echo "BRANCH_INFO=稳定版" >> "$GITHUB_ENV"
-            fi
+            echo "BRANCH_INFO=(${{ inputs.kernelsu_branch || 'main' }})" >> "$GITHUB_ENV"
           fi
 
           echo "KSU_NAME=$KSU_NAME" >> "$GITHUB_ENV"
@@ -349,7 +524,9 @@ jobs:
             fi
           }
           check_build "${{ inputs.build_a12_5_10 || inputs.build_all }}" "build-a12-5-10" "${{ needs.build-a12-5-10.result }}"
+          check_build "${{ inputs.build_a13_5_10 || inputs.build_all }}" "build-a13-5-10" "${{ needs.build-a13-5-10.result }}"
           check_build "${{ inputs.build_a13_5_15 || inputs.build_all }}" "build-a13-5-15" "${{ needs.build-a13-5-15.result }}"
+          check_build "${{ inputs.build_a14_5_15 || inputs.build_all }}" "build-a14-5-15" "${{ needs.build-a14-5-15.result }}"
           check_build "${{ inputs.build_a14_6_1 || inputs.build_all }}" "build-a14-6-1" "${{ needs.build-a14-6-1.result }}"
           check_build "${{ inputs.build_a15_6_6 || inputs.build_all }}" "build-a15-6-6" "${{ needs.build-a15-6-6.result }}"
           check_build "${{ inputs.build_a16_6_12 || inputs.build_all }}" "build-a16-6-12" "${{ needs.build-a16-6-12.result }}"
@@ -363,31 +540,11 @@ jobs:
       - name: 获取 KernelSU 提交信息
         if: inputs.clean_build != true
         run: |
-          REPO_URL="https://github.com/ReSukiSU/ReSukiSU.git"
-          REPO_URL2="ReSukiSU/ReSukiSU"
+          KSU_REF="${{ needs.resolve-ksu-ref.outputs.sha }}"
+          KSU_URL="https://github.com/ReSukiSU/ReSukiSU/commit/$KSU_REF"
 
-          # 如果用户输入了自定义分支/commit，优先使用
-          if [ -n "${{ inputs.kernelsu_branch }}" ]; then
-            BRANCH_INPUT="${{ inputs.kernelsu_branch }}"
-            # 检查是否是 commit hash (40位十六进制)
-            if [[ "$BRANCH_INPUT" =~ ^[a-fA-F0-9]{40}$ ]]; then
-              KSU_REF=$BRANCH_INPUT
-              KSU_URL="https://github.com/$REPO_URL2/commit/$BRANCH_INPUT"
-            else
-              # 是分支名，获取该分支的最新 commit
-              COMMIT_HASH=$(git ls-remote $REPO_URL refs/heads/$BRANCH_INPUT | awk '{ print $1 }')
-              KSU_REF=$COMMIT_HASH
-              KSU_URL="https://github.com/$REPO_URL2/commit/$COMMIT_HASH"
-            fi
-          else
-            # 稳定版：获取最新 tag
-            TAG=$(git ls-remote --tags --sort=-v:refname $REPO_URL | grep -o 'refs/tags/.*' | cut -d'/' -f3 | head -n1)
-            KSU_REF=$TAG
-            KSU_URL="https://github.com/$REPO_URL2/releases/tag/$TAG"
-          fi
-
-          echo "KSU_REF=$KSU_REF" >> $GITHUB_ENV
-          echo "KSU_URL=$KSU_URL" >> $GITHUB_ENV
+          echo "KSU_REF=$KSU_REF" >> "$GITHUB_ENV"
+          echo "KSU_URL=$KSU_URL" >> "$GITHUB_ENV"
 
       - name: 获取 SUSFS 提交信息
         if: inputs.clean_build != true
@@ -396,7 +553,9 @@ jobs:
           GITLAB_REPO="susfs4ksu"
           declare -A BRANCH_MAP=(
             ["gki_android12_5_10"]="gki-android12-5.10"
+            ["gki_android13_5_10"]="gki-android13-5.10"
             ["gki_android13_5_15"]="gki-android13-5.15"
+            ["gki_android14_5_15"]="gki-android14-5.15"
             ["gki_android14_6_1"]="gki-android14-6.1"
             ["gki_android15_6_6"]="gki-android15-6.6"
             ["gki_android16_6_12"]="gki-android16-6.12"
@@ -516,7 +675,9 @@ jobs:
 
           **SUSFS4KSU**:
           - gki-android12-5.10: [${{ env.COMMIT_HASH_gki_android12_5_10 }}](${{ env.COMMIT_URL_gki_android12_5_10 }})
+          - gki-android13-5.10: [${{ env.COMMIT_HASH_gki_android13_5_10 }}](${{ env.COMMIT_URL_gki_android13_5_10 }})
           - gki-android13-5.15: [${{ env.COMMIT_HASH_gki_android13_5_15 }}](${{ env.COMMIT_URL_gki_android13_5_15 }})
+          - gki-android14-5.15: [${{ env.COMMIT_HASH_gki_android14_5_15 }}](${{ env.COMMIT_URL_gki_android14_5_15 }})
           - gki-android14-6.1: [${{ env.COMMIT_HASH_gki_android14_6_1 }}](${{ env.COMMIT_URL_gki_android14_6_1 }})
           - gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
           - gki-android16-6.12: [${{ env.COMMIT_HASH_gki_android16_6_12 }}](${{ env.COMMIT_URL_gki_android16_6_12 }})
@@ -621,7 +782,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          INPUT_COMMIT="${{ inputs.commit }}"
+          INPUT_COMMIT="${KSU_REF:-}"
+          INPUT_COMMIT="${INPUT_COMMIT:0:7}"
+          if [ -z "$INPUT_COMMIT" ]; then INPUT_COMMIT="未集成"; fi
+          WORKFLOW_COMMIT="${GITHUB_SHA:0:7}"
           INPUT_CHANGE_LOG="${{ inputs.change_log }}"
 
           TEXT=$(cat <<EOF
@@ -645,7 +809,7 @@ jobs:
           
           Download: <a href="https://github.com/coolzyd9107/GKI_ReSukiSU_SUSFS/releases/tag/${NEW_TAG}">Click Here</a>
 
-          Workflow commit: <code>${{ github.sha }}</code>
+          Workflow commit: <code>${WORKFLOW_COMMIT}</code>
           EOF
           )
 
@@ -662,7 +826,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          INPUT_COMMIT="${{ inputs.commit }}"
+          INPUT_COMMIT="${KSU_REF:-}"
+          INPUT_COMMIT="${INPUT_COMMIT:0:7}"
+          if [ -z "$INPUT_COMMIT" ]; then INPUT_COMMIT="未集成"; fi
+          WORKFLOW_COMMIT="${GITHUB_SHA:0:7}"
           INPUT_CHANGE_LOG="${{ inputs.change_log }}"
 
           TEXT=$(cat <<EOF
@@ -686,7 +853,7 @@ jobs:
           
           Download: <a href="https://github.com/coolzyd9107/GKI_ReSukiSU_SUSFS/releases/tag/${NEW_TAG}">Click Here</a>
 
-          Workflow commit: <code>${{ github.sha }}</code>
+          Workflow commit: <code>${WORKFLOW_COMMIT}</code>
           EOF
           )
 

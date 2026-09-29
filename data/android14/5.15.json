@@ -1,0 +1,117 @@
+{
+  "android_version": "android14",
+  "kernel_version": "5.15",
+  "lts": "5.15.217",
+  "entries": [
+    {
+      "date": "2023-06",
+      "kernel": "5.15.110",
+      "revision": "r11"
+    },
+    {
+      "date": "2023-08",
+      "kernel": "5.15.110",
+      "revision": "r18"
+    },
+    {
+      "date": "2023-09",
+      "kernel": "5.15.110",
+      "revision": "r4"
+    },
+    {
+      "date": "2023-11",
+      "kernel": "5.15.131",
+      "revision": "r21"
+    },
+    {
+      "date": "2024-01",
+      "kernel": "5.15.137",
+      "revision": "r19"
+    },
+    {
+      "date": "2024-02",
+      "kernel": "5.15.144",
+      "revision": "r12"
+    },
+    {
+      "date": "2024-03",
+      "kernel": "5.15.144",
+      "revision": "r10"
+    },
+    {
+      "date": "2024-04",
+      "kernel": "5.15.148",
+      "revision": "r10"
+    },
+    {
+      "date": "2024-05",
+      "kernel": "5.15.148",
+      "revision": "r25"
+    },
+    {
+      "date": "2024-06",
+      "kernel": "5.15.149",
+      "revision": "r9"
+    },
+    {
+      "date": "2024-07",
+      "kernel": "5.15.153",
+      "revision": "r11"
+    },
+    {
+      "date": "2024-08",
+      "kernel": "5.15.158",
+      "revision": "r5"
+    },
+    {
+      "date": "2024-09",
+      "kernel": "5.15.164",
+      "revision": "r9"
+    },
+    {
+      "date": "2024-11",
+      "kernel": "5.15.167",
+      "revision": "r11"
+    },
+    {
+      "date": "2025-01",
+      "kernel": "5.15.170",
+      "revision": "r4"
+    },
+    {
+      "date": "2025-03",
+      "kernel": "5.15.178",
+      "revision": "r5"
+    },
+    {
+      "date": "2025-05",
+      "kernel": "5.15.180",
+      "revision": "r8"
+    },
+    {
+      "date": "2025-07",
+      "kernel": "5.15.185",
+      "revision": "r5"
+    },
+    {
+      "date": "2025-10",
+      "kernel": "5.15.192",
+      "revision": "r5"
+    },
+    {
+      "date": "2026-01",
+      "kernel": "5.15.196",
+      "revision": "r6"
+    },
+    {
+      "date": "2026-04",
+      "kernel": "5.15.202",
+      "revision": "r5"
+    },
+    {
+      "date": "2026-07",
+      "kernel": "5.15.208",
+      "revision": "r2"
+    }
+  ]
+}

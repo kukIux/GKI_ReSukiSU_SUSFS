@@ -131,7 +131,7 @@ jobs:
       deduplicate_sublevels: false
 
   build:
-    name: "Build ${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
+    name: "Build ${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.android_version }}-${{ matrix.os_patch_level }}"
     needs: prepare-matrix
     strategy:
       fail-fast: false

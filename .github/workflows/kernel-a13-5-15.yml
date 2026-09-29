@@ -1,4 +1,4 @@
-name: 内核构建 - Android 13 (5.15)
+name: 内核构建 - 5.15 (Android 13/14)
 
 # 适配 Node.js 24
 env:
@@ -83,6 +83,10 @@ on:
         default: false
   workflow_call:
     inputs:
+      android_version:
+        required: false
+        type: string
+        default: android13
       clean_build:
         required: false
         type: boolean
@@ -135,12 +139,12 @@ jobs:
   prepare-matrix:
     uses: ./.github/workflows/prepare-matrix.yml
     with:
-      data_file: data/android13/5.15.json
+      data_file: ${{ format('data/{0}/5.15.json', inputs.android_version || 'android13') }}
       deduplicate_sublevels: true
 
   build-kernels-a13-5-15:
     needs: prepare-matrix
-    name: "${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
+    name: "${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.android_version }}-${{ matrix.os_patch_level }}"
     strategy:
       fail-fast: false
       matrix:

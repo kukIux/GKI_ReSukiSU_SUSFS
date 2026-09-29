@@ -88,8 +88,6 @@ def validate_data(
         revision = entry.get("revision")
         if revision is not None:
             _require_string(revision, f"{field}.revision", REVISION_RE)
-        elif kernel_version == "5.10":
-            raise DataError(f"{field}.revision is required for kernel 5.10")
 
     root_lts = data.get("lts")
     if root_lts is not None:
@@ -111,10 +109,21 @@ def validate_data(
     }
 
 
-def build_matrix(data: Any, deduplicate_sublevels: bool) -> list[dict[str, str]]:
+def build_matrix(
+    data: Any, deduplicate_sublevels: bool, kernel_filter: str = ""
+) -> list[dict[str, str]]:
     validated = validate_data(data)
     android_version = validated["android_version"]
     kernel_version = validated["kernel_version"]
+    if kernel_filter:
+        match = re.fullmatch(r"(\d+\.\d+)\.(\d+|[xX])", kernel_filter)
+        if not match or match.group(1) != kernel_version:
+            raise DataError(f"kernel filter does not match {kernel_version}: {kernel_filter!r}")
+        selected_sublevel = match.group(2)
+        wildcard = selected_sublevel.lower() == "x"
+    else:
+        selected_sublevel = ""
+        wildcard = False
     matrix: list[dict[str, str]] = []
     seen_sublevels: set[str] = set()
 
@@ -122,6 +131,8 @@ def build_matrix(data: Any, deduplicate_sublevels: bool) -> list[dict[str, str]]
         sublevel = _sublevel(
             entry["kernel"], kernel_version, f"entries[{index}].kernel"
         )
+        if kernel_filter and not wildcard and sublevel != selected_sublevel:
+            continue
         patch_level = entry["date"]
         if (
             deduplicate_sublevels
@@ -143,15 +154,22 @@ def build_matrix(data: Any, deduplicate_sublevels: bool) -> list[dict[str, str]]
         )
 
     if validated["lts"] is not None:
-        matrix.append(
-            {
-                "android_version": android_version,
-                "kernel_version": kernel_version,
-                "sub_level": _sublevel(validated["lts"], kernel_version, "lts"),
-                "os_patch_level": "lts",
-                "revision": validated["lts_revision"] or "",
-            }
-        )
+        lts_sublevel = _sublevel(validated["lts"], kernel_version, "lts")
+        if not kernel_filter or wildcard or lts_sublevel == selected_sublevel:
+            matrix.append(
+                {
+                    "android_version": android_version,
+                    "kernel_version": kernel_version,
+                    "sub_level": lts_sublevel,
+                    "os_patch_level": "lts",
+                    "revision": validated["lts_revision"] or "",
+                }
+            )
+
+    if kernel_filter and not matrix:
+        raise DataError(f"kernel version not found in JSON: {kernel_filter}")
+    if kernel_filter and not wildcard:
+        return matrix[:1]
 
     return matrix
 
@@ -159,6 +177,9 @@ def build_matrix(data: Any, deduplicate_sublevels: bool) -> list[dict[str, str]]
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("data_file", type=Path)
+    parser.add_argument(
+        "--kernel-filter", default="", help="select a full kernel version or major.minor.X"
+    )
     parser.add_argument(
         "--deduplicate-sublevels",
         action="store_true",
@@ -178,7 +199,7 @@ def main() -> int:
             args.data_file.parent.name,
             args.data_file.stem,
         )
-        matrix = build_matrix(validated, args.deduplicate_sublevels)
+        matrix = build_matrix(validated, args.deduplicate_sublevels, args.kernel_filter)
     except (OSError, json.JSONDecodeError, DataError) as error:
         print(f"{args.data_file}: {error}", file=sys.stderr)
         return 1

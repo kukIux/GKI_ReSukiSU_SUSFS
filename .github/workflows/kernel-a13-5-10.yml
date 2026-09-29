@@ -1,0 +1,85 @@
+name: 内核构建 - Android 13 (5.10)
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_call:
+    inputs:
+      clean_build:
+        type: boolean
+        default: false
+      kernelsu_branch:
+        type: string
+        required: true
+      version:
+        type: string
+        required: false
+      build_time:
+        type: string
+        required: false
+      use_zram:
+        type: boolean
+        required: true
+      use_bbg:
+        type: boolean
+        required: true
+      use_rekernel:
+        type: boolean
+        default: false
+      cve_2026_43499_patch:
+        type: boolean
+        default: true
+      cancel_susfs:
+        type: boolean
+        default: false
+      droidspaces:
+        type: string
+        default: "off"
+      droidspaces_ntsync:
+        type: boolean
+        default: false
+      build_bypass:
+        type: boolean
+        default: false
+
+jobs:
+  prepare-matrix:
+    uses: ./.github/workflows/prepare-matrix.yml
+    with:
+      data_file: data/android13/5.10.json
+      deduplicate_sublevels: false
+
+  build:
+    needs: prepare-matrix
+    name: "${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.android_version }}-${{ matrix.os_patch_level }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      clean_build: ${{ inputs.clean_build }}
+      android_version: ${{ matrix.android_version }}
+      kernel_version: ${{ matrix.kernel_version }}
+      sub_level: ${{ matrix.sub_level }}
+      os_patch_level: ${{ matrix.os_patch_level }}
+      revision: ${{ matrix.revision || '' }}
+      ksu_variant: ${{ inputs.clean_build && 'Clean' || 'ReSukiSU' }}
+      ksu_branch: ${{ inputs.kernelsu_branch }}
+      version: ${{ inputs.version || '' }}
+      build_time: ${{ inputs.build_time || '' }}
+      use_zram: ${{ inputs.use_zram }}
+      use_bbg: ${{ inputs.use_bbg }}
+      use_rekernel: ${{ inputs.use_rekernel || false }}
+      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
+      supp_op: false
+      enable_susfs: ${{ !inputs.cancel_susfs }}
+      droidspaces: ${{ inputs.droidspaces || 'off' }}
+      droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
+      build_bypass: ${{ inputs.build_bypass || false }}

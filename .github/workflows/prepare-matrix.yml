@@ -15,6 +15,11 @@ on:
         required: false
         type: boolean
         default: true
+      kernel_filter:
+        description: "指定完整内核版本或主版本.X，留空构建完整矩阵"
+        required: false
+        type: string
+        default: ""
     outputs:
       matrix:
         description: "GitHub Actions 构建矩阵"
@@ -42,8 +47,12 @@ jobs:
         env:
           DATA_FILE: ${{ inputs.data_file }}
           DEDUPLICATE_SUBLEVELS: ${{ inputs.deduplicate_sublevels }}
+          KERNEL_FILTER: ${{ inputs.kernel_filter }}
         run: |
           args=("$DATA_FILE")
+          if [ -n "$KERNEL_FILTER" ]; then
+            args+=(--kernel-filter "$KERNEL_FILTER")
+          fi
           if [ "$DEDUPLICATE_SUBLEVELS" = "true" ]; then
             args+=(--deduplicate-sublevels)
           fi

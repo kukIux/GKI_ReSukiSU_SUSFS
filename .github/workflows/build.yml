@@ -364,10 +364,22 @@ jobs:
           retry 4 15 "$REPO" init --depth=1 -u https://android.googlesource.com/kernel/manifest -b "common-${FORMATTED_BRANCH}" --repo-rev=v2.16
 
           # 检查是否为已弃用的分支
-          REMOTE_BRANCH=$(retry 4 15 git ls-remote https://android.googlesource.com/kernel/common "$FORMATTED_BRANCH")
+          REMOTE_BRANCH=$(retry 4 15 git ls-remote --heads https://android.googlesource.com/kernel/common "refs/heads/${FORMATTED_BRANCH}")
           DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
 
-          if grep -q deprecated <<< $REMOTE_BRANCH; then
+          if [ -n "${{ inputs.revision }}" ] && [ "${{ inputs.os_patch_level }}" != "lts" ]; then
+            RELEASE_TAG="${FORMATTED_BRANCH}_${{ inputs.revision }}"
+            TAG_REF=$(retry 4 15 git ls-remote --tags --refs https://android.googlesource.com/kernel/common "refs/tags/${RELEASE_TAG}")
+            if [ -z "$TAG_REF" ]; then
+              echo "::error::未找到 JSON 指定的发布 tag: $RELEASE_TAG" >&2
+              exit 1
+            fi
+            sed -i "s|revision=\"${FORMATTED_BRANCH}\"|revision=\"refs/tags/${RELEASE_TAG}\"|" "$DEFAULT_MANIFEST_PATH"
+            if ! grep -qF "revision=\"refs/tags/${RELEASE_TAG}\"" "$DEFAULT_MANIFEST_PATH"; then
+              echo "::error::未能在 manifest 中设置 kernel/common 的发布 tag" >&2
+              exit 1
+            fi
+          elif [ -z "$REMOTE_BRANCH" ] && [ -n "$(retry 4 15 git ls-remote --heads https://android.googlesource.com/kernel/common "refs/heads/deprecated/${FORMATTED_BRANCH}")" ]; then
             echo "检测到已弃用的分支: $FORMATTED_BRANCH"
             sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
           elif [ -z "$REMOTE_BRANCH" ]; then
@@ -495,7 +507,7 @@ jobs:
 
           NEEDS_FIX=false
           if [[ "${{ inputs.android_version }}" == "android13" && "${{ inputs.kernel_version }}" == "5.10" && $CURRENT_SUB -le 186 ]] ||
-             [[ "${{ inputs.android_version }}" == "android13" && "${{ inputs.kernel_version }}" == "5.15" && $CURRENT_SUB -le 119 ]] ||
+             [[ "${{ inputs.kernel_version }}" == "5.15" && $CURRENT_SUB -le 119 ]] ||
              [[ "${{ inputs.android_version }}" == "android14" && "${{ inputs.kernel_version }}" == "6.1" && $CURRENT_SUB -le 43 ]]; then
             NEEDS_FIX=true
           fi
@@ -535,11 +547,11 @@ jobs:
 
           # 如果用户输入了自定义分支名或 commit hash，直接使用
           if [ -n "$branch_input" ]; then
-            BRANCH="-s $branch_input"
+            BRANCH="$branch_input"
             echo "使用自定义分支/提交: $branch_input"
           else
             # ReSukiSU 默认使用 main 分支
-            BRANCH="-s main"
+            BRANCH="main"
           fi
 
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
@@ -551,15 +563,23 @@ jobs:
         if: inputs.clean_build != true
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
+          set -euo pipefail
           echo "添加 ReSukiSU..."
-          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash $BRANCH
+          curl -fLSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s -- "$BRANCH"
 
           if [ -d "KernelSU/.git" ]; then
+            KSU_ACTUAL_REF=$(git -C KernelSU rev-parse HEAD)
+            if [[ "$BRANCH" =~ ^[a-fA-F0-9]{40}$ ]] && [[ "${KSU_ACTUAL_REF,,}" != "${BRANCH,,}" ]]; then
+              echo "::error::ReSukiSU 实际提交 $KSU_ACTUAL_REF 与指定提交 $BRANCH 不一致"
+              exit 1
+            fi
+            echo "KSU_ACTUAL_REF=$KSU_ACTUAL_REF" >> "$GITHUB_ENV"
             KSU_LATEST_COMMIT_DATE=$(git -C KernelSU log -1 --date=format:'%Y-%m-%d %H:%M:%S %z' --format='%cd')
-            echo "KSU_LATEST_COMMIT_DATE=$KSU_LATEST_COMMIT_DATE" >> $GITHUB_ENV
+            echo "KSU_LATEST_COMMIT_DATE=$KSU_LATEST_COMMIT_DATE" >> "$GITHUB_ENV"
             echo "KSU 仓库最新提交日期: $KSU_LATEST_COMMIT_DATE"
           else
-            echo "KSU_LATEST_COMMIT_DATE=未知" >> $GITHUB_ENV
+            echo "::error::ReSukiSU 安装后缺少 KernelSU 仓库"
+            exit 1
           fi
 
       # ==================== 应用 SUSFS 补丁 ====================
@@ -756,8 +776,8 @@ jobs:
                fi
              fi
 
-             # Android 13 - 5.15 修复
-            if [[ "${{ inputs.android_version }}" == "android13" && "${{ inputs.kernel_version }}" == "5.15" ]]; then
+             # 5.15 修复
+            if [[ "${{ inputs.kernel_version }}" == "5.15" ]]; then
                if [[ "$CURRENT_SUB" -le 148 && "${{ inputs.os_patch_level }}" != "2024-05" ]]; then
                  sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
                fi
@@ -775,7 +795,7 @@ jobs:
                 else
                   sed -i '0,/^#include /s//#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MAP) || defined(CONFIG_KSU_SUSFS_OPEN_REDIRECT)\n#include <linux\/susfs_def.h>\n#endif\n&/' ./fs/proc/task_mmu.c
                 fi
-                echo "已修复 Android 13 5.15 task_mmu.c 缺少 susfs_def.h 问题"
+                echo "已修复 5.15 task_mmu.c 缺少 susfs_def.h 问题"
               fi
               # 修复 5.15 LTS: SUSFS 补丁在 namespace.c 头部 hunk 因上下文不匹配而失败，
               # 导致函数体中的 SUSFS 符号（DEFAULT_KSU_MNT_ID 等）未声明
@@ -1007,6 +1027,10 @@ jobs:
               ;;
             android13-5.15)
               NTSYNC_PATCH="ntsync_compat_android13-5.15"
+              ;;
+            android14-5.15)
+              echo "::error::上游尚未提供 Android 14 / 5.15 的 NTSync 兼容补丁"
+              exit 1
               ;;
             android14-6.1)
               NTSYNC_PATCH="ntsync_compat_android14-6.1"
@@ -1276,7 +1300,7 @@ jobs:
           if [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]]; then
             CURRENT_SUB=99999
           fi
-          if [[ "${{ inputs.ksu_variant }}" == "ReSukiSU" && "${{ inputs.android_version }}" == "android13" && "${{ inputs.kernel_version }}" == "5.15" && "$CURRENT_SUB" -ge 74 && "$CURRENT_SUB" -le 137 ]]; then
+          if [[ "${{ inputs.ksu_variant }}" == "ReSukiSU" && "${{ inputs.kernel_version }}" == "5.15" && "$CURRENT_SUB" -ge 74 && "$CURRENT_SUB" -le 137 ]]; then
             {
               echo "CONFIG_KALLSYMS=y"
               echo "CONFIG_KALLSYMS_ALL=y"

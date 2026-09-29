@@ -9,7 +9,10 @@ import time
 from gki_fetch import (
     TARGETS,
     fetch_lts,
+    fetch_latest_release_tags,
     fetch_makefile,
+    fetch_monthly_branches,
+    fetch_tag_makefile,
     get_end_date,
     json_path,
     make_date_range,
@@ -24,6 +27,7 @@ def update_target(android_ver: str, kernel_ver: str,
     path = json_path(android_ver, kernel_ver)
     end = get_end_date(date_end)
     is_k510 = (kernel_ver == "5.10")
+    has_release_tags = kernel_ver in ("5.10", "5.15")
 
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
@@ -41,37 +45,66 @@ def update_target(android_ver: str, kernel_ver: str,
         entries = []
     original_data = copy.deepcopy(data)
 
-    # 建立已有日期索引，避免覆写
-    existing_dates = {e.get("date") for e in entries if isinstance(e, dict)}
+    existing_by_date = {e["date"]: e for e in entries}
     all_dates = make_date_range(date_start, end)
-    new_dates = [d for d in all_dates if d not in existing_dates]
-
-    if not new_dates:
-        print("  No new months to fetch")
+    if has_release_tags:
+        release_tags = fetch_latest_release_tags(android_ver, kernel_ver)
+        monthly_branches = fetch_monthly_branches(android_ver, kernel_ver)
+        for date in all_dates:
+            release = release_tags.get(date)
+            tag = release[0] if release is not None else None
+            current = existing_by_date.get(date)
+            previous = current.copy() if current is not None else None
+            if tag is None:
+                if date not in monthly_branches:
+                    if current is not None:
+                        raise RuntimeError(f"no release tag or branch for {android_ver}-{kernel_ver}-{date}")
+                    continue
+                text = fetch_makefile(android_ver, kernel_ver, date, dep_cutoff)
+                if text is None:
+                    raise RuntimeError(f"monthly branch has no Makefile: {android_ver}-{kernel_ver}-{date}")
+            else:
+                text = fetch_tag_makefile(*release)
+            ver = parse_version(text)
+            if ver is None:
+                raise RuntimeError(f"failed to parse Makefile for {tag or date}")
+            detail = ".".join(ver)
+            if current is None:
+                entry = {"date": date, "kernel": detail}
+                entries.append(entry)
+                existing_by_date[date] = entry
+                current = entry
+            else:
+                current["kernel"] = detail
+            if tag is None:
+                current.pop("revision", None)
+            else:
+                current["revision"] = "r" + tag.rsplit("_r", 1)[1]
+            if current != previous:
+                print(f"  [{tag or date}] -> {detail}")
+            time.sleep(0.3)
     else:
-        print(f"  Fetching {len(new_dates)} new month(s): {new_dates[0]} ~ {new_dates[-1]}")
+        new_dates = [date for date in all_dates if date not in existing_by_date]
+        if not new_dates:
+            print("  No new months to fetch")
+        monthly_branches = (
+            fetch_monthly_branches(android_ver, kernel_ver) if new_dates else set()
+        )
         for date in new_dates:
             label = f"{android_ver}-{kernel_ver}-{date}"
             print(f"    [{label}] ", end="", flush=True)
-
+            if date not in monthly_branches:
+                print("not found, skip")
+                continue
             text = fetch_makefile(android_ver, kernel_ver, date, dep_cutoff)
             if text is None:
                 print("not found, skip")
                 continue
-
             ver = parse_version(text)
             if ver is None:
                 raise RuntimeError(f"failed to parse Makefile for {label}")
-
-            version, patchlevel, sublevel = ver
-            detail = f"{version}.{patchlevel}.{sublevel}"
-
-            # 仅 5.10 写入 revision
-            new_entry = {"date": date, "kernel": detail}
-            if is_k510:
-                new_entry["revision"] = "r1"
-
-            entries.append(new_entry)
+            detail = ".".join(ver)
+            entries.append({"date": date, "kernel": detail})
             print(f"-> {detail}")
             time.sleep(0.3)
 
@@ -102,8 +135,10 @@ def update_target(android_ver: str, kernel_ver: str,
             else:
                 print(f"-> {lts_value} (unchanged)")
         else:
-            entries.append({"date": "lts", "kernel": lts_value, "revision": "r1"})
+            lts_entry = {"date": "lts", "kernel": lts_value}
+            entries.append(lts_entry)
             print(f"-> {lts_value} (added to entries)")
+        lts_entry.pop("revision", None)
     else:
         # 其他版本使用根节点 lts
         old_lts = data.get("lts")

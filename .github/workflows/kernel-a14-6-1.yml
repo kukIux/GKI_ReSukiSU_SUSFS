@@ -140,7 +140,7 @@ jobs:
 
   build-kernels-a14-6-1:
     needs: prepare-matrix
-    name: "${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.os_patch_level }}"
+    name: "${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.android_version }}-${{ matrix.os_patch_level }}"
     strategy:
       fail-fast: false
       matrix:
