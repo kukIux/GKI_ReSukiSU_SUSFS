@@ -407,6 +407,9 @@ jobs:
             fi
           fi
           echo "REMOTE_BRANCH=$REMOTE_BRANCH" >> $GITHUB_ENV
+          git -C common rev-parse --short=12 HEAD | sed 's/^/-g/' | tr -d '\n' > common/.scmversion
+
+          # ==== 伪装 /proc/config.gz（自动检测）
 
       # ==================== 伪装 /proc/config.gz（自动检测） ====================
       # 若仓库存在 config/stock_defconfig，则自动应用；不存在则跳过
