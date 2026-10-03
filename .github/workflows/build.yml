@@ -230,6 +230,7 @@ jobs:
       # 安装内核编译所需的各种工具和库（使用 apt 缓存加速）
       - name: 安装编译依赖
         run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y ccache python3 git curl build-essential libssl-dev bison flex libelf-dev dwarves
 
@@ -426,6 +427,9 @@ jobs:
             fi
           fi
           echo "REMOTE_BRANCH=$REMOTE_BRANCH" >> $GITHUB_ENV
+          git -C common tag | xargs -r git -C common tag -d
+
+          # ==== 伪装 /proc/config.gz（自动检测）
 
       # ==================== 伪装 /proc/config.gz（自动检测） ====================
       # 若仓库存在 config/stock_defconfig，则自动应用；不存在则跳过
@@ -1719,13 +1723,10 @@ jobs:
       # AnyKernel3 包本身已是 zip，upload-artifact 会再套一层 zip 容器
       # compression-level=0 关闭外层压缩，避免对已压缩的 AK3 二次压缩
       - name: 上传构建产物
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.BUILD_VARIANT }}_kernel-${{ env.CONFIG }}
-          path: |
-            *AnyKernel3.zip
-#            *.img
-          compression-level: 0
+          path: "*AnyKernel3.zip"
+          archive: false
 
       # ==================== 上传补丁冲突文件 ====================
       - name: 上传补丁冲突文件
