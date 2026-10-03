@@ -15,6 +15,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import gki_fetch  # noqa: E402
+import prepare_matrix  # noqa: E402
 import update_data  # noqa: E402
 
 
@@ -23,6 +24,19 @@ def makefile(sublevel: int, patchlevel: int = 10) -> str:
 
 
 class ReleaseTagTests(unittest.TestCase):
+    def test_android17_618_target_and_matrix_data(self) -> None:
+        self.assertEqual(gki_fetch.TARGETS[("android17", "6.18")][0], "2026-04")
+        root = Path(__file__).resolve().parents[1]
+        path = root / "data/android17/6.18.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        validated = prepare_matrix.validate_data(
+            data, str(path), "android17", "6.18"
+        )
+        matrix = prepare_matrix.build_matrix(validated, deduplicate_sublevels=True)
+        self.assertEqual(
+            [item["sub_level"] for item in matrix], ["20", "21", "32", "33"]
+        )
+
     def test_latest_revision_is_numeric_and_scoped_to_series(self) -> None:
         output = "\n".join(
             (

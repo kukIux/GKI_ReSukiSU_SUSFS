@@ -20,22 +20,23 @@
 
 ## 支持的 KMI
 
-| Android KMI | 内核系列 | 主工作流开关 |
+| Android KMI | 内核系列 | `build_target` 选项 |
 |---|---|---|
-| Android 12 | 5.10 | `build_a12_5_10` |
-| Android 13 | 5.10 | `build_a13_5_10` |
-| Android 13 | 5.15 | `build_a13_5_15` |
-| Android 14 | 5.15 | `build_a14_5_15` |
-| Android 14 | 6.1 | `build_a14_6_1` |
-| Android 15 | 6.6 | `build_a15_6_6` |
-| Android 16 | 6.12 | `build_a16_6_12` |
+| Android 12 | 5.10 | `android12-5.10` |
+| Android 13 | 5.10 | `android13-5.10` |
+| Android 13 | 5.15 | `android13-5.15` |
+| Android 14 | 5.15 | `android14-5.15` |
+| Android 14 | 6.1 | `android14-6.1` |
+| Android 15 | 6.6 | `android15-6.6` |
+| Android 16 | 6.12 | `android16-6.12` |
+| Android 17 | 6.18 | `android17-6.18` |
 
-5.10 和 5.15 都对应多个 Android KMI。尤其 5.15 的 Android 13 与 Android 14 存在相同的内核版本号，不能仅凭 `5.15.xxx` 自动判断 KMI；指定版本构建时必须手动选择对应的 Android 版本。
+5.10 和 5.15 都对应多个 Android KMI。尤其 5.15 的 Android 13 与 Android 14 存在相同的内核版本号，不能仅凭 `5.15.xxx` 自动判断 KMI；指定版本构建时必须手动选择对应的 Android 版本。Android 17 / 6.18 当前已支持基础构建，部分附属组件按上游支持状态自动跳过。
 
 ## 运行构建
 
 1. 打开仓库的 [Actions](https://github.com/coolzyd9107/GKI_ReSukiSU_SUSFS/actions) 页面，选择 **构建内核** 工作流并点击 **Run workflow**。
-2. `build_all` 默认开启，会构建上表中的全部 KMI。只构建部分目标时，先关闭 `build_all`，再勾选需要的版本开关。
+2. 在 `build_target` 中选择一个 KMI，或选择 `all` 构建全部目标。choice 是单选项；需要构建多个但不是全部时，分别运行对应目标。
 3. 根据需要设置功能选项和 `release_type`，然后启动工作流。
 4. 构建完成后，在运行详情页的 **Artifacts** 下载产物；创建 Release 时也可以从 Release 页面下载。
 
@@ -52,7 +53,7 @@
 
 - 5.10：`kernel_android_version` 必须选 `android12` 或 `android13`。
 - 5.15：必须选 `android13` 或 `android14`。
-- 6.1、6.6、6.12：工作流分别使用 Android 14、15、16 的 KMI，无需手动选择。
+- 6.1、6.6、6.12、6.18：工作流分别使用 Android 14、15、16、17 的 KMI，无需手动选择。
 
 补丁级别、发布 revision 和 LTS 版本由对应 JSON 数据读取。指定版本构建不会创建 GitHub Release，即使 `release_type` 选择了预发布或正式发布。
 
@@ -75,18 +76,18 @@ Fork 仓库只生成 Actions 产物，不会向上游仓库发布 Release。
 | 选项 | 说明 |
 |---|---|
 | `clean_build` | 不集成 ReSukiSU、SUSFS 及可选功能补丁。 |
-| `cancel_susfs` | 关闭 SUSFS 集成。默认启用 SUSFS。 |
-| `use_zram` | 启用 ZRAM 增强（LZ4KD）。 |
+| `cancel_susfs` | 关闭 SUSFS 集成。默认启用 SUSFS；Android 17 / 6.18 暂无上游分支，会自动跳过。 |
+| `use_zram` | 启用 ZRAM 增强（LZ4KD）。Android 17 / 6.18 暂无对应补丁，会自动跳过。 |
 | `use_bbg` | 启用 BBG 防格机补丁。 |
-| `use_rekernel` | 启用 Re-Kernel 驱动，功能仍在测试。 |
-| `cve_2026_43499_patch` | 应用 CVE-2026-43499 修复链，默认开启。 |
+| `use_rekernel` | 启用 Re-Kernel 驱动，功能仍在测试。Android 17 / 6.18 暂时跳过，待本仓库适配上游新源码布局。 |
+| `cve_2026_43499_patch` | 应用 CVE-2026-43499 修复链，默认开启；6.18 暂无本仓库适配补丁，会自动跳过。 |
 | `build_bypass` | 额外构建 Bypass Image，与普通 Image 一起放入安装包。 |
-| `droidspaces` | 选择 Droidspaces 容器补丁：`off`、`678`、`123` 或 `345`。 |
-| `droidspaces_ntsync` | 在支持的组合中启用 NTSync，需同时启用 Droidspaces。 |
+| `droidspaces` | 选择 Droidspaces 容器补丁：`off`、`678`、`123` 或 `345`。6.12 及以上使用上游的通用补丁。 |
+| `droidspaces_ntsync` | 在支持的组合中启用 NTSync，需同时启用 Droidspaces。当前没有 Android 17 / 6.18 补丁，该组合会自动跳过。 |
 
 Bypass 模式用于排查内核模块版本兼容问题，不用于绕过 root 检测。启用后会进行第二次完整编译，并增加构建时间。刷入时按安装脚本提示选择普通 Image 或 Bypass Image。
 
-Droidspaces 补丁具有实验性，不同设备和内核版本可能需要尝试不同槽位。Android 16 / 6.12 只有一种槽位补丁，选任一非 `off` 值即可。上游没有 Android 14 / 5.15 的 NTSync 兼容补丁；该组合启用 NTSync 会明确使构建失败，请保持关闭。
+Droidspaces 补丁具有实验性，不同设备和内核版本可能需要尝试不同槽位。Android 16 / 6.12 和 Android 17 / 6.18 只有一种槽位补丁，选任一非 `off` 值即可。上游没有 Android 14 / 5.15 的 NTSync 兼容补丁；该组合会使构建失败，请保持关闭。Android 17 / 6.18 的 NTSync 补丁缺失时会自动跳过。
 
 ## 构建产物
 
