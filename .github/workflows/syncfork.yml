@@ -12,11 +12,11 @@ jobs:
       - name: GitHub Sync
         uses: repo-sync/github-sync@v2
         with:
-          # Вказуємо, звідки і що брати (оригінал)
-          upstream_repository: coolzyd9107/GKI_ReSukiSU_SUSFS
-          upstream_branch: main
-          # Вказуємо, куди і що класти (ваш форк)
-          target_branch: main
-          # Використовуємо ваш токен для запису
+          # Вказуємо ОРИГІНАЛЬНИЙ репозиторій (звідки беремо)
+          source_repo: "https://github.com/coolzyd9107/GKI_ReSukiSU_SUSFS.git"
+          # З якої гілки оригіналу брати
+          source_branch: "main"
+          # В яку гілку вашого форку класти
+          destination_branch: "main"
+          # Ваш токен
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          
