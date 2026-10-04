@@ -1,0 +1,21 @@
+name: Sync Fork
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+
+      - name: Sync upstream changes
+        uses: a2ren/fork-sync@v1
+        with:
+          upstream_repository: coolzyd9107/GKI_ReSukiSU_SUSFS
+          target_branch: main
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          
