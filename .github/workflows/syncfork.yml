@@ -2,20 +2,21 @@ name: Sync Fork
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
-  workflow_dispatch:
+    - cron: '*/30 * * * *' # Кожні 30 хвилин
+  workflow_dispatch: # Ручний запуск
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout target repo
-        uses: actions/checkout@v4
-
-      - name: Sync upstream changes
-        uses: a2ren/fork-sync@v1
+      - name: GitHub Sync
+        uses: repo-sync/github-sync@v2
         with:
+          # Вказуємо, звідки і що брати (оригінал)
           upstream_repository: coolzyd9107/GKI_ReSukiSU_SUSFS
+          upstream_branch: main
+          # Вказуємо, куди і що класти (ваш форк)
           target_branch: main
+          # Використовуємо ваш токен для запису
           github_token: ${{ secrets.GITHUB_TOKEN }}
           
