@@ -1,4 +1,4 @@
-name: 内核构建 - Android 12 (5.10)
+name: 内核构建 - Android 17 (6.18)
 
 # 适配 Node.js 24
 env:
@@ -56,15 +56,18 @@ on:
         required: true
         type: boolean
         default: false
+      supp_op:
+        description: "启用一加 8E 支持"
+        required: false
+        type: boolean
+        default: false
       droidspaces:
         description: "Droidspaces 容器支持"
         required: false
         type: choice
         options:
           - "off"
-          - "678"
-          - "123"
-          - "345"
+          - "on"
         default: "off"
       droidspaces_ntsync:
         description: "启用 Droidspaces 容器 NTSync 支持（需启用 Droidspaces）"
@@ -110,6 +113,9 @@ on:
       cancel_susfs:
         required: false
         type: boolean
+      supp_op:
+        required: false
+        type: boolean
       droidspaces:
         required: false
         type: string
@@ -127,16 +133,16 @@ jobs:
   prepare-matrix:
     uses: ./.github/workflows/prepare-matrix.yml
     with:
-      data_file: data/android12/5.10.json
-      deduplicate_sublevels: false
+      data_file: data/android17/6.18.json
+      deduplicate_sublevels: true
 
-  build:
-    name: "Build ${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.android_version }}-${{ matrix.os_patch_level }}"
+  build-kernels-a17-6-18:
     needs: prepare-matrix
+    name: "${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.android_version }}-${{ matrix.os_patch_level }}"
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+        include: ${{ fromJson(needs['prepare-matrix'].outputs.matrix) }}
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
@@ -150,11 +156,11 @@ jobs:
       ksu_branch: ${{ inputs.kernelsu_branch }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
-      use_zram: ${{ inputs.use_zram }}
+      use_zram: false
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
-      supp_op: false
+      supp_op: ${{ inputs.supp_op || false }}
       enable_susfs: ${{ !inputs.cancel_susfs }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
