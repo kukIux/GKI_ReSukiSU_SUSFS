@@ -7,7 +7,7 @@
 # 3. 创建 GitHub Release (可选)
 # ========================================
 
-name: 构建内核
+name: Build GKI Kernels
 
 # 适配 Node.js 24
 env:
@@ -27,7 +27,7 @@ on:
     inputs:
       # ==================== 发布配置 ====================
       release_type:
-        description: "发布类型"
+        description: "Release type"
         type: choice
         options:
           - Actions
@@ -38,24 +38,24 @@ on:
       # ==================== KernelSU 配置 ====================
       # KernelSU 变体固定为 BakaSU
       kernelsu_branch:
-        description: "BakaSU branch (main/dev/自定义，留空使用main)"
+        description: "BakaSU branch (main/dev/custom branch; leave blank to use main)"
         type: string
         default: "main"
         required: false
 
       # ==================== 可选配置 ====================
       version:
-        description: "自定义版本名 (可选)"
+        description: "Custom version name (optional)"
         type: string
         default: ""
         required: false
       build_time:
-        description: "自定义构建时间 (可选，N或留空=当前UTC)"
+        description: "Custom build time (optional; enter N or leave blank to use the current UTC time)"
         type: string
         default: "Sun Dec 01 08:10:00 UTC 2024"
         required: false
       droidspaces:
-        description: "Droidspaces 容器支持 (5.10~6.6: 槽位补丁, 6.12+: 开/关)"
+        description: "Droidspaces container support (5.10-6.6: slot patch options; 6.12+: on/off)"
         type: choice
         options:
           - "off"
@@ -64,48 +64,52 @@ on:
           - "345"
         default: "off"
       droidspaces_ntsync:
-        description: "启用 Droidspaces 容器 NTSync 支持（需启用 Droidspaces）"
+        description: "Enable NTSync support for Droidspaces containers (requires Droidspaces to be enabled)"
         type: boolean
         default: false
       build_bypass:
-        description: "同时构建普通内核和 Bypass 内核"
+        description: "Build both standard and Bypass kernels"
         type: boolean
         default: false
 
       # ==================== 功能开关 ====================
       clean_build:
-        description: "清洁构建 (不集成 KernelSU、SUSFS 和可选补丁)"
+        description: "Clean build (without KernelSU, SUSFS, or optional patches)"
         type: boolean
         default: false
 
       use_zram:
-        description: "启用 ZRAM 增强算法"
+        description: "Enable enhanced ZRAM algorithms"
         type: boolean
         default: false
       use_bbg:
-        description: "启用 BBG 防格机"
+        description: "Enable the BBG anti-brick patch"
         type: boolean
         default: false
       use_rekernel:
-        description: "启用 Re-Kernel 驱动"
+        description: "Enable Re-Kernel drivers"
         type: boolean
         default: false
       use_nomount:
-        description: "启用 NoMount 挂载元模块（需配套模块）"
+        description: "Enable NoMount mount support (requires the companion module)"
         type: boolean
         default: false
       cve_2026_43499_patch:
-        description: "应用 CVE-2026-43499 rtmutex 修复链"
+        description: "Apply the CVE-2026-43499 rtmutex patch series"
         type: boolean
         default: true
       cancel_susfs:
-        description: "禁用 SUSFS"
+        description: "Disable SUSFS"
+        type: boolean
+        default: false
+      supp_op:
+        description: "Enable OnePlus 8E support"
         type: boolean
         default: false
 
       # ==================== 构建版本选择 ====================
       build_target:
-        description: "选择构建目标；单次选择一个 KMI，或构建全部"
+        description: "Choose a build target: select one KMI per run, or build all"
         type: choice
         options:
           - all
@@ -119,16 +123,16 @@ on:
           - android17-6.18
         default: all
       build_kernel_version:
-        description: "按内核版本及所选 KMI 构建（优先于上方版本选择）"
+        description: "Build using the kernel version and selected KMI (takes precedence over the version selection above)"
         type: boolean
         default: false
       kernel_version_filter:
-        description: "内核版本，如 6.6.66 或 6.6.X（X 不区分大小写，以 X 结尾时则构建该内核大版本的所有子版本）"
+        description: "Kernel version, e.g., 6.6.66 or 6.6.X (X is case-insensitive; a trailing X builds all subversions in that kernel series)"
         type: string
         default: ""
         required: false
       kernel_android_version:
-        description: "构建 5.10/5.15 时选择 Android KMI；6.1 及以上保持 auto"
+        description: "Select the Android KMI for 5.10/5.15; leave as auto for 6.1 and later"
         type: choice
         options:
           - auto
@@ -139,7 +143,7 @@ on:
 
       # ==================== Bot-Push 选项 ====================
       change_log:
-        description: "Change Log (可选，支持多行)"
+        description: "Change log (optional; multiple lines supported)"
         type: string
         default: ""
         required: false
@@ -246,7 +250,7 @@ jobs:
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
-      supp_op: false
+      supp_op: ${{ inputs.supp_op }}
       enable_susfs: ${{ !inputs.cancel_susfs }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
@@ -257,9 +261,11 @@ jobs:
   build-a12-5-10:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android12-5.10' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a12-5-10.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android12/5.10.json
+      deduplicate_sublevels: false
       clean_build: ${{ inputs.clean_build }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
@@ -269,6 +275,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
@@ -278,9 +285,11 @@ jobs:
   build-a13-5-10:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android13-5.10' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a13-5-10.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android13/5.10.json
+      deduplicate_sublevels: false
       clean_build: ${{ inputs.clean_build }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
@@ -290,6 +299,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
@@ -299,9 +309,11 @@ jobs:
   build-a13-5-15:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android13-5.15' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a13-5-15.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android13/5.15.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
@@ -311,6 +323,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
@@ -320,10 +333,11 @@ jobs:
   build-a14-5-15:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android14-5.15' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a13-5-15.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
-      android_version: android14
+      data_file: data/android14/5.15.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
@@ -333,6 +347,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
@@ -342,9 +357,11 @@ jobs:
   build-a14-6-1:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android14-6.1' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a14-6-1.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android14/6.1.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
@@ -354,6 +371,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
@@ -363,9 +381,11 @@ jobs:
   build-a15-6-6:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android15-6.6' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a15-6-6.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android15/6.6.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
@@ -375,6 +395,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
@@ -384,9 +405,11 @@ jobs:
   build-a16-6-12:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android16-6.12' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a16-6-12.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android16/6.12.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
@@ -396,6 +419,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
@@ -405,9 +429,11 @@ jobs:
   build-a17-6-18:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android17-6.18' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a17-6-18.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android17/6.18.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
@@ -417,6 +443,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}

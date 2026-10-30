@@ -5,7 +5,7 @@
 # 通过 workflow_call 被其他工作流调用，不直接手动触发
 # ========================================
 
-name: 内核构建流程
+name: Kernel Build Progress
 
 # 适配 Node.js 24
 env:
