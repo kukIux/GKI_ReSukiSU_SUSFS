@@ -28,6 +28,10 @@ on:
         required: false
         type: boolean
         default: false
+      disable_bakasu:
+        required: false
+        type: boolean
+        default: false
       kernelsu_branch:
         required: true
         type: string
@@ -97,12 +101,13 @@ jobs:
     secrets: inherit
     with:
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       android_version: ${{ matrix.android_version }}
       kernel_version: ${{ matrix.kernel_version }}
       sub_level: ${{ matrix.sub_level }}
       os_patch_level: ${{ matrix.os_patch_level }}
       revision: ${{ matrix.revision || '' }}
-      ksu_variant: ${{ inputs.clean_build && 'Clean' || 'BakaSU' }}
+      ksu_variant: ${{ inputs.clean_build && 'Clean' || inputs.disable_bakasu && 'NoKSU' || 'BakaSU' }}
       ksu_branch: ${{ inputs.kernelsu_branch }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
@@ -111,7 +116,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       supp_op: ${{ inputs.supp_op || false }}
-      enable_susfs: ${{ !inputs.cancel_susfs }}
+      enable_susfs: ${{ !inputs.cancel_susfs && !inputs.disable_bakasu }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       use_nomount: ${{ inputs.use_nomount || false }}

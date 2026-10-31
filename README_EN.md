@@ -96,6 +96,7 @@ Use this if you know your full kernel version, for example `uname -r` shows `6.6
 | `build_target` | Ignored in this mode; leaving the default `all` will not build everything | `all` |
 | `build_time` | Clear it, or enter `N` | Empty |
 | `release_type` | Keep `Actions` in a fork | `Actions` |
+| `disable_bakasu` | Check it to disable BakaSU; SUSFS turns off automatically and other switches still apply | Unchecked |
 | Other feature switches | Keep the defaults for the first build | Defaults |
 
 4. **Click Run workflow.** This mode produces **exactly one job**, usually named like `6.6.92-android15-2025-07`.
@@ -162,7 +163,7 @@ Steps:
 3. `sub_level` is only the last component: `6.6.92` → `92`, `5.15.110` → `110`.
 4. `os_patch_level` is the JSON `date` in `YYYY-MM` format. For an LTS target, enter `lts`.
 5. `revision` must match the JSON exactly. If the entry has no `revision`, clear it, **including the prefilled `r11`**.
-6. Enable `supp_op` if you need OnePlus 8E support; enable other features as needed.
+6. Enable `supp_op` if you need OnePlus 8E support; enable `disable_bakasu` to build without BakaSU (SUSFS turns off automatically); enable other features as needed.
 7. Click **Run workflow** and download the result from that run's **Artifacts**. This workflow does not create a Release.
 
 > **`revision` is the easiest thing to get wrong.** The form's `r11` is only an example. The current 6.1 / 6.6 / 6.12 / 6.18 data has no revisions, so the field must be empty. A wrong value makes the build look for a non-existent upstream tag and usually fails.
@@ -181,6 +182,7 @@ Actions artifact names usually look like this:
 |---|---|---|
 | Normal build | `BakaSU_kernel-android15-6.6.92-2025-07` | `android15-6.6.92-2025-07-BakaSU-AnyKernel3.zip` |
 | With revision | `BakaSU_kernel-android13-5.10.198-2023-12-r7` | `android13-5.10.198-2023-12-r7-BakaSU-AnyKernel3.zip` |
+| BakaSU disabled | `NoKSU_kernel-android15-6.6.92-2025-07` | `android15-6.6.92-2025-07-NoKSU-AnyKernel3.zip` |
 | Clean build | `Clean_kernel-android15-6.6.92-2025-07` | `android15-6.6.92-2025-07-Clean-AnyKernel3.zip` |
 
 The **Artifacts download is always a ZIP**. Extract only that outer layer; the `...-AnyKernel3.zip` inside is the flashable package. **Do not extract the AK3 ZIP itself.** Artifacts may expire, so download them soon after the run.
@@ -195,7 +197,7 @@ If `build_bypass` is enabled, the AK3 ZIP contains both the normal `Image` and a
 2. Back up your current boot image and make sure you can restore it with fastboot or Recovery.
 3. Flash the inner `...-AnyKernel3.zip` with Recovery or an AnyKernel3-compatible kernel flasher.
 4. Reboot. The first boot may take a little longer than usual.
-5. After booting, install the [BakaSU manager](https://github.com/Baka-SU/BakaSU) and confirm root works. If you need the SUSFS module, you can install the [ksu_module_susfs](https://github.com/sidex15/ksu_module_susfs) recommended in the release notes; if you need NoMount, install the [NoMount module](https://github.com/maxsteeel/nomount).
+5. For a normal build, install the [BakaSU manager](https://github.com/Baka-SU/BakaSU) after booting and confirm root works. If you need the SUSFS module, you can install the [ksu_module_susfs](https://github.com/sidex15/ksu_module_susfs) recommended in the release notes; if you need NoMount, install the [NoMount module](https://github.com/maxsteeel/nomount). A build with `disable_bakasu` skips this step and does not include SUSFS.
 
 If the phone does not boot, restore the boot image you backed up and do not keep re-flashing. Post the failed job log, device model, and kernel version in [Issues](../../issues).
 
@@ -221,13 +223,14 @@ If the phone does not boot, restore the boot image you backed up and do not keep
 | `kernelsu_branch` | `main` (blank also means `main`) | Normally leave it blank or enter `main`. Advanced users can enter a BakaSU branch name or a full 40-character commit SHA. |
 | `version` | Empty | Optional local kernel version suffix. It is not the kernel version; it changes the `uname -r` suffix. Usually leave it empty. |
 | `build_time` | `Sun Dec 01 08:10:00 UTC 2024` | Clear it or enter `N` to use the current UTC time; or enter a timestamp string such as `Sun Dec 01 08:10:00 UTC 2024`. |
-| `clean_build` | `false` | Skips BakaSU, SUSFS, and optional feature patches; the artifact is named `Clean_kernel-...`. Do not check it if you want root. `build_bypass` still triggers an extra compilation. |
+| `clean_build` | `false` | Skips BakaSU, SUSFS, and all optional feature patches; the artifact is named `Clean_kernel-...`. Do not check it if you want root. `build_bypass` still triggers an extra compilation. To disable only BakaSU while keeping other optional features, use `disable_bakasu`. |
+| `disable_bakasu` | `false` | Skips BakaSU. SUSFS is forced off with it. ZRAM, BBG, Re-Kernel, Droidspaces, NoMount, `supp_op`, the CVE patch, and Bypass still follow their own switches. The artifact is named `NoKSU_kernel-...`. If `clean_build` is also checked, `clean_build` takes precedence. |
 
 ### Feature switches
 
 | Input | Default | In one sentence | When to enable / notes |
 |---|---|---|---|
-| `cancel_susfs` | `false` | Checking it **disables** SUSFS | Leave it unchecked to keep SUSFS. Clean builds and 6.18 skip SUSFS. |
+| `cancel_susfs` | `false` | Checking it **disables** SUSFS | Leave it unchecked to keep SUSFS. Clean builds, `disable_bakasu`, and 6.18 skip SUSFS. |
 | `use_zram` | `false` | Enhanced ZRAM / LZ4KD algorithms | Enable only if you want the ZRAM enhancements. When building 6.12 via `build_target` it is forced off; 6.18 skips it. |
 | `use_bbg` | `false` | BBG anti-brick patch | Enable only if needed; not every device requires it. |
 | `use_rekernel` | `false` | Experimental Re-Kernel drivers | Usually unnecessary; 6.18 skips it. |
@@ -241,6 +244,8 @@ If the phone does not boot, restore the boot image you backed up and do not keep
 > **Android 17 / 6.18 automatically skips:** SUSFS, ZRAM/LZ4KD, NTSync, Re-Kernel, OnePlus 8E, and the CVE-2026-43499 fix series. BBG and Droidspaces remain available. The "build information summary" at the start of each build log lists the features that are actually enabled.
 
 > **Android 16 / 6.12 and ZRAM:** when building 6.12 via `build_target`, ZRAM is forced off; 6.18 skips it. Keeping it off is recommended for 6.12.
+
+> **Disabling BakaSU (`disable_bakasu`):** only BakaSU and SUSFS are turned off. Every other optional feature still follows its own switch. `clean_build` turns off the optional features as well. If both are checked, `clean_build` takes precedence.
 
 ## Workflow reference
 

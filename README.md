@@ -96,6 +96,7 @@ KMI 可以理解成 **Android 版本 + 内核系列**，例如 `android15-6.6`�
 | `build_target` | 会被忽略；保持默认 `all` 也不会全量构建 | `all` |
 | `build_time` | 清空，或填 `N` | 留空 |
 | `release_type` | fork 里保持 `Actions` | `Actions` |
+| `disable_bakasu` | 想禁用 BakaSU 就勾选；SUSFS 会自动关闭，其他开关照常 | 不勾 |
 | 其他功能开关 | 首次构建保持默认 | 默认 |
 
 4. **点 Run workflow。** 这个模式只会跑 **1 个 job**，名字类似 `6.6.92-android15-2025-07`。
@@ -162,7 +163,7 @@ KMI 可以理解成 **Android 版本 + 内核系列**，例如 `android15-6.6`�
 3. `sub_level` 只填最后一段：`6.6.92` 填 `92`，`5.15.110` 填 `110`。
 4. `os_patch_level` 填 JSON 里的 `date`，格式是 `YYYY-MM`；LTS 目标填 `lts`。
 5. `revision` 必须和 JSON 完全一致。JSON 里没有 `revision` 就清空，**特别是要清掉表单默认的 `r11`**。
-6. 需要一加 8E 就勾 `supp_op`；其他功能按需开。
+6. 需要一加 8E 就勾 `supp_op`；要禁用 BakaSU 就勾 `disable_bakasu`（SUSFS 会自动关闭）；其他功能按需开。
 7. 点 **Run workflow**，跑完后从这次运行的 **Artifacts** 下载。这个工作流不创建 Release。
 
 > **最容易错的是 `revision`。** 表单默认填 `r11` 只是示例；当前 6.1 / 6.6 / 6.12 / 6.18 的数据都没有 revision，必须清空。填错会去找不存在的上游 tag，通常直接失败。
@@ -181,6 +182,7 @@ Actions 的 Artifact 名称通常长这样：
 |---|---|---|
 | 普通构建 | `BakaSU_kernel-android15-6.6.92-2025-07` | `android15-6.6.92-2025-07-BakaSU-AnyKernel3.zip` |
 | 带 revision | `BakaSU_kernel-android13-5.10.198-2023-12-r7` | `android13-5.10.198-2023-12-r7-BakaSU-AnyKernel3.zip` |
+| 禁用 BakaSU | `NoKSU_kernel-android15-6.6.92-2025-07` | `android15-6.6.92-2025-07-NoKSU-AnyKernel3.zip` |
 | Clean build | `Clean_kernel-android15-6.6.92-2025-07` | `android15-6.6.92-2025-07-Clean-AnyKernel3.zip` |
 
 GitHub 的 **Artifacts 下载下来是一个 ZIP**；只解压这一层，里面那个 `...-AnyKernel3.zip` 才是刷机包。**AK3 ZIP 本身不要再解压。** Artifacts 可能会过期，建议跑完尽快下载。
@@ -195,7 +197,7 @@ GitHub 的 **Artifacts 下载下来是一个 ZIP**；只解压这一层，里面
 2. 备份当前 boot 镜像，并确认自己能用 fastboot 或 Recovery 刷回去。
 3. 用 Recovery，或支持 AnyKernel3 的刷写工具，刷入里面那个 `...-AnyKernel3.zip`。
 4. 重启。第一次开机可能比平时久一点。
-5. 开机后安装 [BakaSU 管理器](https://github.com/Baka-SU/BakaSU)，确认 root 授权正常。需要 SUSFS 模块时，可以安装发布说明推荐的 [ksu_module_susfs](https://github.com/sidex15/ksu_module_susfs)；需要 NoMount 时安装 [NoMount 模块](https://github.com/maxsteeel/nomount)。
+5. 普通构建开机后安装 [BakaSU 管理器](https://github.com/Baka-SU/BakaSU)，确认 root 授权正常。需要 SUSFS 模块时，可以安装发布说明推荐的 [ksu_module_susfs](https://github.com/sidex15/ksu_module_susfs)；需要 NoMount 时安装 [NoMount 模块](https://github.com/maxsteeel/nomount)。勾了 `disable_bakasu` 的构建跳过这一步，也不会有 SUSFS。
 
 如果开不了机：恢复之前备份的 boot，不要反复刷。把失败的 job 日志、设备型号、内核版本一起发到 [Issues](../../issues)。
 
@@ -221,13 +223,14 @@ GitHub 的 **Artifacts 下载下来是一个 ZIP**；只解压这一层，里面
 | `kernelsu_branch` | `main`（留空也按 `main`） | 一般留空或填 `main`。高级用法可以填 BakaSU 分支名或完整 40 位 commit SHA。 |
 | `version` | 空 | 可选的内核本地版本后缀。它不是内核版本；填了会改 `uname -r` 后缀，一般留空。 |
 | `build_time` | `Sun Dec 01 08:10:00 UTC 2024` | 清空或填 `N` 用当前 UTC 时间；也可以填 `Sun Dec 01 08:10:00 UTC 2024` 这种时间字符串。 |
-| `clean_build` | `false` | 勾选后不集成 BakaSU、SUSFS 和可选功能补丁，产物是 `Clean_kernel-...`。要 root 就别勾；`build_bypass` 仍会额外编译一次。 |
+| `clean_build` | `false` | 勾选后不集成 BakaSU、SUSFS 和所有可选功能补丁，产物是 `Clean_kernel-...`。要 root 就别勾；`build_bypass` 仍会额外编译一次。只想禁用 BakaSU、保留其他可选功能，用 `disable_bakasu`。 |
+| `disable_bakasu` | `false` | 勾选后不集成 BakaSU；SUSFS 会同步强制禁用；ZRAM、BBG、Re-Kernel、Droidspaces、NoMount、`supp_op`、CVE 补丁和 Bypass 等仍按各自开关生效。产物是 `NoKSU_kernel-...`。同时勾 `clean_build` 时以 `clean_build` 为准。 |
 
 ### 功能开关
 
 | 参数 | 默认 | 一句话说明 | 什么时候开 / 注意 |
 |---|---|---|---|
-| `cancel_susfs` | `false` | 勾选表示**关闭** SUSFS | 不勾才有 SUSFS；clean build 和 6.18 会跳过 |
+| `cancel_susfs` | `false` | 勾选表示**关闭** SUSFS | 不勾才有 SUSFS；clean build、`disable_bakasu` 和 6.18 会跳过 |
 | `use_zram` | `false` | 增强 ZRAM / LZ4KD 算法 | 想要 ZRAM 增强才开；6.12 通过 `build_target` 构建时会强制关闭；6.18 自动跳过 |
 | `use_bbg` | `false` | BBG 防格机补丁 | 按需开；不是所有设备都需要 |
 | `use_rekernel` | `false` | 实验性 Re-Kernel 驱动 | 一般不用；6.18 自动跳过 |
@@ -241,6 +244,8 @@ GitHub 的 **Artifacts 下载下来是一个 ZIP**；只解压这一层，里面
 > **Android 17 / 6.18 会自动跳过：** SUSFS、ZRAM/LZ4KD、NTSync、Re-Kernel、一加 8E 和 CVE-2026-43499 修复链。BBG 和 Droidspaces 仍可用。构建日志开头的“构建信息摘要”会列出实际启用的功能。
 
 > **Android 16 / 6.12 的 ZRAM：** 通过 `build_target` 构建 6.12 时，ZRAM 会被强制关闭；6.18 自动跳过。6.12 建议保持关闭。
+
+> **禁用 BakaSU（`disable_bakasu`）：** 只关闭 BakaSU 和 SUSFS。其他可选功能仍按各自的开关生效；`clean_build` 则是连可选功能一起关闭。两者同时勾选时按 `clean_build` 处理。
 
 ## 工作流清单
 

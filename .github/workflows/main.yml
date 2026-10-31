@@ -77,6 +77,10 @@ on:
         description: "Clean build (without KernelSU, SUSFS, or optional patches)"
         type: boolean
         default: false
+      disable_bakasu:
+        description: "Disable BakaSU (SUSFS is disabled automatically; other optional features still apply)"
+        type: boolean
+        default: false
 
       use_zram:
         description: "Enable enhanced ZRAM algorithms"
@@ -156,7 +160,7 @@ jobs:
     steps:
       - name: 固定 BakaSU 构建提交
         id: resolve
-        if: inputs.clean_build != true
+        if: inputs.clean_build != true && inputs.disable_bakasu != true
         env:
           KSU_BRANCH: ${{ inputs.kernelsu_branch || 'main' }}
         run: |
@@ -237,12 +241,13 @@ jobs:
     secrets: inherit
     with:
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       android_version: ${{ matrix.android_version }}
       kernel_version: ${{ matrix.kernel_version }}
       sub_level: ${{ matrix.sub_level }}
       os_patch_level: ${{ matrix.os_patch_level }}
       revision: ${{ matrix.revision || '' }}
-      ksu_variant: ${{ inputs.clean_build && 'Clean' || 'BakaSU' }}
+      ksu_variant: ${{ inputs.clean_build && 'Clean' || inputs.disable_bakasu && 'NoKSU' || 'BakaSU' }}
       ksu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
@@ -251,7 +256,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       supp_op: ${{ inputs.supp_op }}
-      enable_susfs: ${{ !inputs.cancel_susfs }}
+      enable_susfs: ${{ !inputs.cancel_susfs && !inputs.disable_bakasu }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       use_nomount: ${{ inputs.use_nomount || false }}
@@ -267,6 +272,7 @@ jobs:
       data_file: data/android12/5.10.json
       deduplicate_sublevels: false
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
@@ -291,6 +297,7 @@ jobs:
       data_file: data/android13/5.10.json
       deduplicate_sublevels: false
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
@@ -315,6 +322,7 @@ jobs:
       data_file: data/android13/5.15.json
       deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
@@ -339,6 +347,7 @@ jobs:
       data_file: data/android14/5.15.json
       deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
@@ -363,6 +372,7 @@ jobs:
       data_file: data/android14/6.1.json
       deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
@@ -387,6 +397,7 @@ jobs:
       data_file: data/android15/6.6.json
       deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
@@ -411,6 +422,7 @@ jobs:
       data_file: data/android16/6.12.json
       deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
@@ -435,6 +447,7 @@ jobs:
       data_file: data/android17/6.18.json
       deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
@@ -517,7 +530,8 @@ jobs:
       REPO_OWNER: ${{ github.repository_owner }}
       REPO_NAME: ${{ github.event.repository.name }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      NOTIFY_SUSFS_STATUS: ${{ inputs.clean_build != true && inputs.cancel_susfs != true && inputs.build_target == 'android17-6.18' && 'auto-skipped (Android 17/6.18)' || inputs.clean_build != true && inputs.cancel_susfs != true && inputs.build_target == 'all' && 'enabled (Android 17/6.18 auto-skipped)' || inputs.clean_build != true && inputs.cancel_susfs != true && 'true' || 'false' }}
+      BUILD_MODE: ${{ inputs.clean_build && 'Clean' || inputs.disable_bakasu && 'NoKSU' || 'BakaSU' }}
+      NOTIFY_SUSFS_STATUS: ${{ inputs.clean_build != true && inputs.disable_bakasu != true && inputs.cancel_susfs != true && inputs.build_target == 'android17-6.18' && 'auto-skipped (Android 17/6.18)' || inputs.clean_build != true && inputs.disable_bakasu != true && inputs.cancel_susfs != true && inputs.build_target == 'all' && 'enabled (Android 17/6.18 auto-skipped)' || inputs.clean_build != true && inputs.disable_bakasu != true && inputs.cancel_susfs != true && 'true' || 'false' }}
       NOTIFY_ZRAM_STATUS: ${{ inputs.clean_build != true && inputs.use_zram && inputs.build_target == 'android17-6.18' && 'auto-skipped (Android 17/6.18)' || inputs.clean_build != true && inputs.use_zram && inputs.build_target == 'all' && 'enabled (Android 17/6.18 auto-skipped)' || inputs.clean_build != true && inputs.use_zram && 'true' || 'false' }}
       NOTIFY_REKERNEL_STATUS: ${{ inputs.clean_build != true && inputs.use_rekernel && inputs.build_target == 'android17-6.18' && 'auto-skipped (Android 17/6.18)' || inputs.clean_build != true && inputs.use_rekernel && inputs.build_target == 'all' && 'enabled (Android 17/6.18 auto-skipped)' || inputs.clean_build != true && inputs.use_rekernel && 'true' || 'false' }}
 
@@ -536,7 +550,11 @@ jobs:
             echo "MOUNT_TYPE=" >> "$GITHUB_ENV"
             echo "BRANCH_INFO=" >> "$GITHUB_ENV"
           else
-            KSU_NAME="BakaSU"
+            if [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+              KSU_NAME="NoKSU"
+            else
+              KSU_NAME="BakaSU"
+            fi
             echo "BBG_STATUS=${{ inputs.use_bbg && '支持' || '不支持' }}" >> "$GITHUB_ENV"
             LZ4_STATUS="${{ inputs.use_zram && '开启' || '未开启' }}"
             LZ4_SUFFIX="${{ inputs.use_zram && '、LZ4KD' || '' }}"
@@ -551,10 +569,14 @@ jobs:
             echo "LZ4_STATUS=$LZ4_STATUS" >> "$GITHUB_ENV"
             echo "LZ4_SUFFIX=$LZ4_SUFFIX" >> "$GITHUB_ENV"
 
-            if [ "${{ inputs.cancel_susfs }}" = "true" ]; then
+            if [ "${{ inputs.cancel_susfs }}" = "true" ] || [ "${{ inputs.disable_bakasu }}" = "true" ]; then
               RELEASE_NAME="GKI内核: ${KSU_NAME}"
               echo "SUSFS_SUFFIX=" >> "$GITHUB_ENV"
-              echo "SUSFS_STATUS=未集成 / Not included" >> "$GITHUB_ENV"
+              if [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+                echo "SUSFS_STATUS=未集成（BakaSU 已禁用） / Not included (BakaSU disabled)" >> "$GITHUB_ENV"
+              else
+                echo "SUSFS_STATUS=未集成 / Not included" >> "$GITHUB_ENV"
+              fi
               echo "HOOK_TYPE=" >> "$GITHUB_ENV"
               echo "MOUNT_TYPE=" >> "$GITHUB_ENV"
             elif [ "${{ inputs.build_target }}" = "android17-6.18" ]; then
@@ -579,7 +601,11 @@ jobs:
               echo "COMPATIBILITY_NOTE=Android 17 / 6.18 自动跳过 SUSFS、ZRAM/LZ4KD、NTSync、Re-Kernel、一加 8E 专用补丁和 CVE-2026-43499 修复链。" >> "$GITHUB_ENV"
             fi
 
-            echo "BRANCH_INFO=(${{ inputs.kernelsu_branch || 'main' }})" >> "$GITHUB_ENV"
+            if [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+              echo "BRANCH_INFO=" >> "$GITHUB_ENV"
+            else
+              echo "BRANCH_INFO=(${{ inputs.kernelsu_branch || 'main' }})" >> "$GITHUB_ENV"
+            fi
           fi
 
           echo "KSU_NAME=$KSU_NAME" >> "$GITHUB_ENV"
@@ -611,7 +637,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: 获取 KernelSU 提交信息
-        if: inputs.clean_build != true
+        if: inputs.clean_build != true && inputs.disable_bakasu != true
         run: |
           KSU_REF="${{ needs.resolve-ksu-ref.outputs.sha }}"
           KSU_URL="https://github.com/Baka-SU/BakaSU/commit/$KSU_REF"
@@ -620,7 +646,7 @@ jobs:
           echo "KSU_URL=$KSU_URL" >> "$GITHUB_ENV"
 
       - name: 获取 SUSFS 提交信息
-        if: inputs.clean_build != true
+        if: inputs.clean_build != true && inputs.disable_bakasu != true
         run: |
           GITLAB_OWNER="simonpunk"
           GITLAB_REPO="susfs4ksu"
@@ -666,8 +692,35 @@ jobs:
           点击下方 **Assets** 展开下载 / Expand **Assets** below to download.
           EOF
 
+      - name: 生成无 BakaSU 发布说明
+        if: ${{ inputs.clean_build != true && inputs.disable_bakasu }}
+        run: |
+          cat > release_body.md << 'EOF'
+          ## GKI 内核：无 BakaSU / GKI Kernel without BakaSU
+
+          此发布未集成 BakaSU，SUSFS 已随 BakaSU 自动禁用。其他可选功能按构建表单的开关生效。
+
+          This release does not include BakaSU. SUSFS is disabled automatically with BakaSU. Other optional features follow the switches in the build form.
+
+          | 组件 / Component | 状态 / Status |
+          |:---|:---|
+          | BakaSU | 未集成 / Not included |
+          | SUSFS | 随 BakaSU 自动禁用 / Disabled with BakaSU |
+          | BBG | ${{ inputs.use_bbg && '已启用 / Enabled' || '未启用 / Not included' }} |
+          | ZRAM / LZ4KD | ${{ inputs.use_zram && '已启用 / Enabled' || '未启用 / Not included' }} |
+          | Re-Kernel | ${{ inputs.use_rekernel && '已启用 / Enabled' || '未启用 / Not included' }} |
+          | Droidspaces | ${{ inputs.droidspaces != 'off' && inputs.droidspaces || 'off' }} |
+
+          > 刷入前请备份原厂 Boot 镜像，并确认内核版本与设备兼容。
+          > Back up your stock boot image and verify kernel compatibility before flashing.
+
+          **LTO**: thin（Android 16 / 17 使用 none）
+
+          点击下方 **Assets** 展开下载 / Expand **Assets** below to download.
+          EOF
+
       - name: 生成常规发布说明
-        if: inputs.clean_build != true
+        if: inputs.clean_build != true && inputs.disable_bakasu != true
         run: |
           cat > release_body.md << EOF
           ## 📦 本次发布内容 / Release Contents
@@ -770,6 +823,8 @@ jobs:
         run: |
           if [ "${{ inputs.clean_build }}" = "true" ]; then
             SUS_VERSION="clean"
+          elif [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+            SUS_VERSION="no-bakasu"
           elif [ "${{ inputs.build_target }}" = "android17-6.18" ]; then
             SUS_VERSION="no-susfs"
           else
@@ -873,13 +928,13 @@ jobs:
           Tag: <code>${NEW_TAG}</code>
           
           Features: 
-          <pre>Build mode = ${{ inputs.clean_build && 'Clean' || 'BakaSU' }}
+          <pre>Build mode = ${BUILD_MODE}
           SuSFS = $NOTIFY_SUSFS_STATUS
           BBG = ${{ inputs.clean_build != true && inputs.use_bbg && 'true' || 'false' }}
           LZ4KD = $NOTIFY_ZRAM_STATUS
           Re-Kernel = $NOTIFY_REKERNEL_STATUS
           Droidspaces = ${{ inputs.clean_build && 'off' || inputs.droidspaces }}${{ inputs.clean_build != true && inputs.build_target != 'android17-6.18' && inputs.droidspaces_ntsync && ' + NTSync' || '' }}
-          KPatch-Next Support = ${{ inputs.clean_build != true && 'true' || 'false' }}</pre>
+          KPatch-Next Support = ${{ inputs.clean_build != true && inputs.disable_bakasu != true && 'true' || 'false' }}</pre>
           Change Log: 
           <pre>${INPUT_CHANGE_LOG}
           </pre>
@@ -917,13 +972,13 @@ jobs:
           Tag: <code>${NEW_TAG}</code>
           
           Features: 
-          <pre>Build mode = ${{ inputs.clean_build && 'Clean' || 'BakaSU' }}
+          <pre>Build mode = ${BUILD_MODE}
           SuSFS = $NOTIFY_SUSFS_STATUS
           BBG = ${{ inputs.clean_build != true && inputs.use_bbg && 'true' || 'false' }}
           LZ4KD = $NOTIFY_ZRAM_STATUS
           Re-Kernel = $NOTIFY_REKERNEL_STATUS
           Droidspaces = ${{ inputs.clean_build && 'off' || inputs.droidspaces }}${{ inputs.clean_build != true && inputs.build_target != 'android17-6.18' && inputs.droidspaces_ntsync && ' + NTSync' || '' }}
-          KPatch-Next Support = ${{ inputs.clean_build != true && 'true' || 'false' }}</pre>
+          KPatch-Next Support = ${{ inputs.clean_build != true && inputs.disable_bakasu != true && 'true' || 'false' }}</pre>
           Change Log: 
           <pre>${INPUT_CHANGE_LOG}
           </pre>

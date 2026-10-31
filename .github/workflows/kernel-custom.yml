@@ -76,6 +76,10 @@ on:
         description: "Clean build (without KernelSU, SUSFS, or optional patches)"
         type: boolean
         default: false
+      disable_bakasu:
+        description: "Disable BakaSU (SUSFS is disabled automatically; other optional features still apply)"
+        type: boolean
+        default: false
 
       use_zram:
         description: "Enable enhanced ZRAM algorithms"
@@ -158,12 +162,13 @@ jobs:
     secrets: inherit
     with:
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       android_version: ${{ inputs.android_version }}
       kernel_version: ${{ inputs.kernel_version }}
       sub_level: ${{ inputs.sub_level }}
       os_patch_level: ${{ inputs.os_patch_level }}
       revision: ${{ inputs.revision || '' }}
-      ksu_variant: ${{ inputs.clean_build && 'Clean' || 'BakaSU' }}
+      ksu_variant: ${{ inputs.clean_build && 'Clean' || inputs.disable_bakasu && 'NoKSU' || 'BakaSU' }}
       ksu_branch: ${{ inputs.kernelsu_branch }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
@@ -172,7 +177,7 @@ jobs:
       use_rekernel: ${{ inputs.use_rekernel || false }}
       cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       supp_op: ${{ inputs.supp_op || false }}
-      enable_susfs: ${{ !inputs.cancel_susfs }}
+      enable_susfs: ${{ !inputs.cancel_susfs && !inputs.disable_bakasu }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       use_nomount: ${{ inputs.use_nomount || false }}

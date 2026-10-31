@@ -1,7 +1,7 @@
 # ========================================
 # GKI 内核构建工作流
 # ========================================
-# 此工作流负责编译 Android GKI 内核，支持 BakaSU、SUSFS 和清洁 GKI 构建
+# 此工作流负责编译 Android GKI 内核，支持 BakaSU、SUSFS、禁用 BakaSU 和清洁 GKI 构建
 # 通过 workflow_call 被其他工作流调用，不直接手动触发
 # ========================================
 
@@ -57,6 +57,10 @@ on:
         required: false
         type: boolean
         default: false
+      disable_bakasu:
+        required: false
+        type: boolean
+        default: false
       use_zram:
         required: true
         type: boolean
@@ -97,7 +101,7 @@ on:
 
 jobs:
   build-kernel:
-    name: "${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}${{ inputs.revision && format('-{0}', inputs.revision) || '' }}-${{ inputs.clean_build && 'Clean' || inputs.ksu_variant }}"
+    name: "${{ inputs.kernel_version }}.${{ inputs.sub_level }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }}${{ inputs.revision && format('-{0}', inputs.revision) || '' }}-${{ inputs.clean_build && 'Clean' || inputs.disable_bakasu && 'NoKSU' || inputs.ksu_variant }}"
     runs-on: ubuntu-latest
     # Bypass 模式包含第二次构建，并保留每次构建的超时重试空间。
     timeout-minutes: ${{ inputs.build_bypass && 180 || 60 }}
@@ -105,7 +109,7 @@ jobs:
     # ==================== 环境变量配置 ====================
     # ccache 配置用于加速重复编译
     env:
-      BUILD_VARIANT: ${{ inputs.clean_build && 'Clean' || inputs.ksu_variant }}
+      BUILD_VARIANT: ${{ inputs.clean_build && 'Clean' || inputs.disable_bakasu && 'NoKSU' || inputs.ksu_variant }}
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
       CCACHE_HARDLINK: "true"
@@ -127,6 +131,10 @@ jobs:
             echo "KernelSU      : 禁用"
             echo "KSU 分支      : 不适用"
             echo "Droidspaces   : off"
+          elif [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+            echo "KernelSU      : 禁用（disable_bakasu）"
+            echo "KSU 分支      : 不适用"
+            echo "Droidspaces   : ${{ inputs.droidspaces }}"
           else
             echo "KernelSU      : ${{ inputs.ksu_variant }}"
             echo "KSU 分支      : ${{ inputs.ksu_branch }}"
@@ -134,7 +142,8 @@ jobs:
           fi
           echo "构建时间      : ${{ inputs.build_time }}"
           echo "清洁构建      : ${{ inputs.clean_build }}"
-          echo "SUSFS 状态    : ${{ inputs.clean_build != true && inputs.enable_susfs && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}"
+          echo "禁用 BakaSU   : ${{ inputs.disable_bakasu }}"
+          echo "SUSFS 状态    : ${{ inputs.clean_build != true && inputs.disable_bakasu != true && inputs.enable_susfs && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}"
           echo "ZRAM 增强     : ${{ inputs.clean_build != true && inputs.use_zram && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}"
           echo "BBG 补丁      : ${{ inputs.clean_build != true && inputs.use_bbg }}"
           echo "Re-Kernel     : ${{ inputs.clean_build != true && inputs.use_rekernel && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}"
@@ -292,7 +301,7 @@ jobs:
           git config --global user.email "BuildGkiKernel@gmail.com"
 
       # ==================== 克隆依赖仓库 ====================
-      # AnyKernel3 始终需要；清洁构建不下载不会使用的功能仓库
+      # AnyKernel3 始终需要；清洁构建跳过所有补丁仓库；禁用 BakaSU 时只跳过 SUSFS
       - name: 克隆依赖仓库
         run: |
           ANYKERNEL_REPO="https://github.com/coolzyd9107/AnyKernel3.git"
@@ -308,23 +317,32 @@ jobs:
           git clone "$ANYKERNEL_REPO" -b "$ANYKERNEL_BRANCH"
           rm -rf AnyKernel3/.git
 
-          if [ "${{ inputs.clean_build }}" = "true" ]; then
-            echo "清理 AnyKernel3 中不适用于清洁构建的品牌信息..."
-            sed -i 's/^kernel.string=.*/kernel.string=Clean GKI kernel build/' AnyKernel3/anykernel.sh
+          if [ "${{ inputs.clean_build }}" = "true" ] || [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+            if [ "${{ inputs.clean_build }}" = "true" ]; then
+              VARIANT_LABEL="Clean"
+            else
+              VARIANT_LABEL="NoKSU"
+            fi
+            echo "清理 AnyKernel3 中的 BakaSU 品牌信息（${VARIANT_LABEL}）..."
+            sed -i "s/^kernel.string=.*/kernel.string=${VARIANT_LABEL} GKI kernel build/" AnyKernel3/anykernel.sh
             sed -i '/^ui_print "Our Telegram Channel:"/,$d' AnyKernel3/anykernel.sh
             rm -f AnyKernel3/banner
 
             if grep -Rqs 'BakaSU' AnyKernel3; then
-              echo "::error::清洁构建的 AnyKernel3 中仍包含 BakaSU 标识"
+              echo "::error::${VARIANT_LABEL} 构建的 AnyKernel3 中仍包含 BakaSU 标识"
               exit 1
             fi
+          fi
 
+          if [ "${{ inputs.clean_build }}" = "true" ]; then
             echo "清洁构建无需 SUSFS 和功能补丁仓库，跳过下载。"
             exit 0
           fi
 
           if [[ "${{ inputs.android_version }}-${{ inputs.kernel_version }}" == "android17-6.18" ]]; then
             echo "Android 17 / 6.18 暂无 SUSFS 上游分支，跳过克隆。"
+          elif [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+            echo "BakaSU 已禁用，SUSFS 同步禁用，跳过 SUSFS 克隆。"
           else
             echo "克隆 SUSFS (分支: $SUSFS_BRANCH)..."
             # BakaSU 使用 simonpunk 的原版 SUSFS
@@ -569,7 +587,7 @@ jobs:
       # BakaSU 支持自定义分支或 commit hash
       - name: 确定 KernelSU 分支
         id: ksu-branch
-        if: inputs.clean_build != true
+        if: inputs.clean_build != true && inputs.disable_bakasu != true
         run: |
           branch_input="${{ inputs.ksu_branch }}"
 
@@ -588,7 +606,7 @@ jobs:
       # ==================== 添加 KernelSU ====================
       # 添加 BakaSU
       - name: 添加 KernelSU
-        if: inputs.clean_build != true
+        if: inputs.clean_build != true && inputs.disable_bakasu != true
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           set -euo pipefail
@@ -613,7 +631,7 @@ jobs:
       # ==================== 应用 SUSFS 补丁 ====================
       # SUSFS (Super User SUS FileSystem) 用于隐藏 root 痕迹
       - name: 应用 SUSFS 补丁
-        if: ${{ inputs.clean_build != true && inputs.enable_susfs && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}
+        if: ${{ inputs.clean_build != true && inputs.disable_bakasu != true && inputs.enable_susfs && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           echo "应用 SUSFS 补丁..."
@@ -1118,7 +1136,7 @@ jobs:
           echo "=== NTSync 补丁与配置注入完成 ==="
 
       - name: 应用 Unicode 绕过修复
-        if: ${{ inputs.clean_build != true && inputs.enable_susfs && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}
+        if: ${{ inputs.clean_build != true && inputs.disable_bakasu != true && inputs.enable_susfs && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}
         working-directory: ${{ env.KERNEL_ROOT }}/common
         run: |
           if [ "${{ inputs.kernel_version }}" = "5.10" ] || [ "${{ inputs.kernel_version }}" = "5.15" ]; then
@@ -1386,22 +1404,25 @@ jobs:
           grep -q '^CONFIG_REKERNEL_NETWORK=y$' "$DEFCONFIG" || echo "CONFIG_REKERNEL_NETWORK=y" >> "$DEFCONFIG"
 
       # ==================== 配置内核选项 ====================
-      # 添加 KernelSU 和其他必要的内核配置
+      # 通用 TMPFS 配置；BakaSU 启用时再追加 CONFIG_KSU
       - name: 配置内核选项
         if: inputs.clean_build != true
         working-directory: ${{ env.KERNEL_ROOT }}
         run: |
           cat >> "$DEFCONFIG" << 'EOF'
-          CONFIG_KSU=y
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
+
+          if [ "${{ inputs.disable_bakasu }}" != "true" ]; then
+            echo "CONFIG_KSU=y" >> "$DEFCONFIG"
+          fi
 
           CURRENT_SUB="${{ inputs.sub_level }}"
           if [[ ! "$CURRENT_SUB" =~ ^[0-9]+$ ]]; then
             CURRENT_SUB=99999
           fi
-          if [[ "${{ inputs.ksu_variant }}" == "BakaSU" && "${{ inputs.kernel_version }}" == "5.15" && "$CURRENT_SUB" -ge 74 && "$CURRENT_SUB" -le 137 ]]; then
+          if [[ "${{ inputs.disable_bakasu }}" != "true" && "${{ inputs.ksu_variant }}" == "BakaSU" && "${{ inputs.kernel_version }}" == "5.15" && "$CURRENT_SUB" -ge 74 && "$CURRENT_SUB" -le 137 ]]; then
             {
               echo "CONFIG_KALLSYMS=y"
               echo "CONFIG_KALLSYMS_ALL=y"
@@ -1422,7 +1443,7 @@ jobs:
       # ==================== 添加 SUSFS 配置 ====================
       # 启用 SUSFS 各项隐藏功能
       - name: 添加 SUSFS 配置
-        if: ${{ inputs.clean_build != true && inputs.enable_susfs && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}
+        if: ${{ inputs.clean_build != true && inputs.disable_bakasu != true && inputs.enable_susfs && !(inputs.android_version == 'android17' && inputs.kernel_version == '6.18') }}
         run: |
           cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_KSU_SUSFS=y
@@ -1548,6 +1569,8 @@ jobs:
             echo "构建模式: $BUILD_VARIANT"
             if [ "${{ inputs.clean_build }}" = "true" ]; then
               echo "清洁构建未集成 KernelSU、SUSFS 或可选功能补丁。"
+            elif [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+              echo "未集成 BakaSU；SUSFS 已同步禁用，其他可选功能按开关生效。"
             else
               echo "KernelSU 提交日期: ${KSU_LATEST_COMMIT_DATE}"
               echo "SUSFS 提交日期: ${SUSFS_LATEST_COMMIT_DATE}"
