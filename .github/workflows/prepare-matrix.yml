@@ -1,4 +1,4 @@
-name: 准备 GKI 构建矩阵
+name: Prepare GKI Build Matrix
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

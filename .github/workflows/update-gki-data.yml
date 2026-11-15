@@ -1,4 +1,4 @@
-name: 更新 GKI 版本数据
+name: Update GKI Version Data
 
 # 适配 Node.js 24
 env:

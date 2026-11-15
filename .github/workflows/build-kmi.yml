@@ -1,4 +1,7 @@
-name: 内核构建 - Android 13 (5.10)
+name: Build KMI Matrix
+
+# 可复用工作流：把一个 GKI 数据文件展开成构建矩阵并逐项构建。
+# 由 Build GKI Kernels 调用，不需要手动运行。
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -10,43 +13,77 @@ permissions:
 on:
   workflow_call:
     inputs:
+      data_file:
+        description: "GKI version data file, e.g. data/android15/6.6.json"
+        required: true
+        type: string
+      deduplicate_sublevels:
+        description: "Keep only the first patch level for each kernel sublevel"
+        required: false
+        type: boolean
+        default: true
+
+      # ==================== Build configuration ====================
       clean_build:
+        required: false
+        type: boolean
+        default: false
+      disable_bakasu:
+        required: false
         type: boolean
         default: false
       kernelsu_branch:
-        type: string
         required: true
+        type: string
       version:
-        type: string
         required: false
+        type: string
       build_time:
-        type: string
         required: false
+        type: string
+        default: "Sun Dec 01 08:10:00 UTC 2024"
+
+      # ==================== Feature switches ====================
       use_zram:
-        type: boolean
         required: true
+        type: boolean
       use_bbg:
-        type: boolean
         required: true
+        type: boolean
       use_rekernel:
+        required: false
         type: boolean
         default: false
-      cve_2026_43499_patch:
-        type: boolean
-        default: true
       cancel_susfs:
+        required: false
+        type: boolean
+        default: false
+      supp_op:
+        required: false
         type: boolean
         default: false
       droidspaces:
+        required: false
         type: string
         default: "off"
       droidspaces_ntsync:
+        required: false
         type: boolean
         default: false
       build_bypass:
+        required: false
         type: boolean
         default: false
       use_nomount:
+        required: false
+        type: boolean
+        default: false
+      apply_custom_patches:
+        required: false
+        type: boolean
+        default: false
+      disable_werror:
+        required: false
         type: boolean
         default: false
 
@@ -54,36 +91,38 @@ jobs:
   prepare-matrix:
     uses: ./.github/workflows/prepare-matrix.yml
     with:
-      data_file: data/android13/5.10.json
-      deduplicate_sublevels: false
+      data_file: ${{ inputs.data_file }}
+      deduplicate_sublevels: ${{ inputs.deduplicate_sublevels }}
 
-  build:
+  build-kernels:
     needs: prepare-matrix
     name: "${{ matrix.kernel_version }}.${{ matrix.sub_level }}-${{ matrix.android_version }}-${{ matrix.os_patch_level }}"
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+        include: ${{ fromJson(needs['prepare-matrix'].outputs.matrix) }}
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       android_version: ${{ matrix.android_version }}
       kernel_version: ${{ matrix.kernel_version }}
       sub_level: ${{ matrix.sub_level }}
       os_patch_level: ${{ matrix.os_patch_level }}
       revision: ${{ matrix.revision || '' }}
-      ksu_variant: ${{ inputs.clean_build && 'Clean' || 'BakaSU' }}
+      ksu_variant: ${{ inputs.clean_build && 'Clean' || inputs.disable_bakasu && 'NoKSU' || 'BakaSU' }}
       ksu_branch: ${{ inputs.kernelsu_branch }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
-      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
-      supp_op: false
-      enable_susfs: ${{ !inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op || false }}
+      enable_susfs: ${{ !inputs.cancel_susfs && !inputs.disable_bakasu }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       use_nomount: ${{ inputs.use_nomount || false }}
       build_bypass: ${{ inputs.build_bypass || false }}
+      apply_custom_patches: ${{ inputs.apply_custom_patches || false }}
+      disable_werror: ${{ inputs.disable_werror || false }}

@@ -7,7 +7,7 @@
 # 3. 创建 GitHub Release (可选)
 # ========================================
 
-name: 构建内核
+name: Build GKI Kernels
 
 # 适配 Node.js 24
 env:
@@ -27,7 +27,7 @@ on:
     inputs:
       # ==================== 发布配置 ====================
       release_type:
-        description: "发布类型"
+        description: "Release type"
         type: choice
         options:
           - Actions
@@ -38,24 +38,24 @@ on:
       # ==================== KernelSU 配置 ====================
       # KernelSU 变体固定为 BakaSU
       kernelsu_branch:
-        description: "BakaSU branch (main/dev/自定义，留空使用main)"
+        description: "BakaSU branch (main/dev/custom branch; leave blank to use main)"
         type: string
         default: "main"
         required: false
 
       # ==================== 可选配置 ====================
       version:
-        description: "自定义版本名 (可选)"
+        description: "Custom version name (optional)"
         type: string
         default: ""
         required: false
       build_time:
-        description: "自定义构建时间 (可选，N或留空=当前UTC)"
+        description: "Custom build time (optional; enter N or leave blank to use the current UTC time)"
         type: string
         default: "Sun Dec 01 08:10:00 UTC 2024"
         required: false
       droidspaces:
-        description: "Droidspaces 容器支持 (5.10~6.6: 槽位补丁, 6.12+: 开/关)"
+        description: "Droidspaces container support (5.10-6.6: slot patch options; 6.12+: on/off)"
         type: choice
         options:
           - "off"
@@ -64,48 +64,73 @@ on:
           - "345"
         default: "off"
       droidspaces_ntsync:
-        description: "启用 Droidspaces 容器 NTSync 支持（需启用 Droidspaces）"
+        description: "Enable NTSync support for Droidspaces containers (requires Droidspaces to be enabled)"
         type: boolean
         default: false
       build_bypass:
-        description: "同时构建普通内核和 Bypass 内核"
+        description: "Build both standard and Bypass kernels"
+        type: boolean
+        default: false
+      disable_werror:
+        description: "Disable CONFIG_WERROR (-Werror) so compiler warnings do not fail the build"
         type: boolean
         default: false
 
       # ==================== 功能开关 ====================
       clean_build:
-        description: "清洁构建 (不集成 KernelSU、SUSFS 和可选补丁)"
+        description: "Clean build (without KernelSU, SUSFS, or optional patches)"
+        type: boolean
+        default: false
+      disable_bakasu:
+        description: "Disable BakaSU (SUSFS is disabled automatically; other optional features still apply)"
         type: boolean
         default: false
 
       use_zram:
-        description: "启用 ZRAM 增强算法"
+        description: "Enable enhanced ZRAM algorithms"
         type: boolean
         default: false
       use_bbg:
-        description: "启用 BBG 防格机"
+        description: "Enable the BBG anti-brick patch"
         type: boolean
         default: false
       use_rekernel:
-        description: "启用 Re-Kernel 驱动"
+        description: "Enable Re-Kernel drivers"
         type: boolean
         default: false
       use_nomount:
-        description: "启用 NoMount 挂载元模块（需配套模块）"
+        description: "Enable NoMount mount support (requires the companion module)"
         type: boolean
         default: false
-      cve_2026_43499_patch:
-        description: "应用 CVE-2026-43499 rtmutex 修复链"
+      apply_custom_patches:
+        description: "Apply custom patches in numeric filename order"
+        type: boolean
+        default: false
+      custom_patch_selection:
+        description: "Allowed values example: all / 1,2 / 001,14,51-400,1919-810"
+        type: string
+        default: "all"
+        required: false
+      apply_selected_patches:
+        description: "true: only apply selected patches; false: skip selected patches"
         type: boolean
         default: true
+      skip_failed_custom_patches:
+        description: "Skip custom patches that fail to apply and continue building"
+        type: boolean
+        default: false
       cancel_susfs:
-        description: "禁用 SUSFS"
+        description: "Disable SUSFS"
+        type: boolean
+        default: false
+      supp_op:
+        description: "Enable OnePlus 8E support"
         type: boolean
         default: false
 
       # ==================== 构建版本选择 ====================
       build_target:
-        description: "选择构建目标；单次选择一个 KMI，或构建全部"
+        description: "Choose a build target: select one KMI per run, or build all"
         type: choice
         options:
           - all
@@ -119,16 +144,16 @@ on:
           - android17-6.18
         default: all
       build_kernel_version:
-        description: "按内核版本及所选 KMI 构建（优先于上方版本选择）"
+        description: "Build using the kernel version and selected KMI (takes precedence over the version selection above)"
         type: boolean
         default: false
       kernel_version_filter:
-        description: "内核版本，如 6.6.66 或 6.6.X（X 不区分大小写，以 X 结尾时则构建该内核大版本的所有子版本）"
+        description: "Kernel version, e.g., 6.6.66 or 6.6.X (X is case-insensitive; a trailing X builds all subversions in that kernel series)"
         type: string
         default: ""
         required: false
       kernel_android_version:
-        description: "构建 5.10/5.15 时选择 Android KMI；6.1 及以上保持 auto"
+        description: "Select the Android KMI for 5.10/5.15; leave as auto for 6.1 and later"
         type: choice
         options:
           - auto
@@ -139,7 +164,7 @@ on:
 
       # ==================== Bot-Push 选项 ====================
       change_log:
-        description: "Change Log (可选，支持多行)"
+        description: "Change log (optional; multiple lines supported)"
         type: string
         default: ""
         required: false
@@ -152,7 +177,7 @@ jobs:
     steps:
       - name: 固定 BakaSU 构建提交
         id: resolve
-        if: inputs.clean_build != true
+        if: inputs.clean_build != true && inputs.disable_bakasu != true
         env:
           KSU_BRANCH: ${{ inputs.kernelsu_branch || 'main' }}
         run: |
@@ -233,194 +258,235 @@ jobs:
     secrets: inherit
     with:
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       android_version: ${{ matrix.android_version }}
       kernel_version: ${{ matrix.kernel_version }}
       sub_level: ${{ matrix.sub_level }}
       os_patch_level: ${{ matrix.os_patch_level }}
       revision: ${{ matrix.revision || '' }}
-      ksu_variant: ${{ inputs.clean_build && 'Clean' || 'BakaSU' }}
+      ksu_variant: ${{ inputs.clean_build && 'Clean' || inputs.disable_bakasu && 'NoKSU' || 'BakaSU' }}
       ksu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel || false }}
-      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
-      supp_op: false
-      enable_susfs: ${{ !inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
+      enable_susfs: ${{ !inputs.cancel_susfs && !inputs.disable_bakasu }}
       droidspaces: ${{ inputs.droidspaces || 'off' }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync || false }}
       use_nomount: ${{ inputs.use_nomount || false }}
       build_bypass: ${{ inputs.build_bypass || false }}
+      apply_custom_patches: ${{ inputs.apply_custom_patches }}
+      disable_werror: ${{ inputs.disable_werror }}
 
   # ==================== Android 12 - 5.10 构建 ====================
   build-a12-5-10:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android12-5.10' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a12-5-10.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android12/5.10.json
+      deduplicate_sublevels: false
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
       build_bypass: ${{ inputs.build_bypass }}
+      apply_custom_patches: ${{ inputs.apply_custom_patches }}
+      disable_werror: ${{ inputs.disable_werror }}
 
   # ==================== Android 13 - 5.10 构建 ====================
   build-a13-5-10:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android13-5.10' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a13-5-10.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android13/5.10.json
+      deduplicate_sublevels: false
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
       build_bypass: ${{ inputs.build_bypass }}
+      apply_custom_patches: ${{ inputs.apply_custom_patches }}
+      disable_werror: ${{ inputs.disable_werror }}
 
   # ==================== Android 13 - 5.15 构建 ====================
   build-a13-5-15:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android13-5.15' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a13-5-15.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android13/5.15.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
       build_bypass: ${{ inputs.build_bypass }}
+      apply_custom_patches: ${{ inputs.apply_custom_patches }}
+      disable_werror: ${{ inputs.disable_werror }}
 
   # ==================== Android 14 - 5.15 构建 ====================
   build-a14-5-15:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android14-5.15' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a13-5-15.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
-      android_version: android14
+      data_file: data/android14/5.15.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
       build_bypass: ${{ inputs.build_bypass }}
+      apply_custom_patches: ${{ inputs.apply_custom_patches }}
+      disable_werror: ${{ inputs.disable_werror }}
 
   # ==================== Android 14 - 6.1 构建 ====================
   build-a14-6-1:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android14-6.1' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a14-6-1.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android14/6.1.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
       build_bypass: ${{ inputs.build_bypass }}
+      apply_custom_patches: ${{ inputs.apply_custom_patches }}
+      disable_werror: ${{ inputs.disable_werror }}
 
   # ==================== Android 15 - 6.6 构建 ====================
   build-a15-6-6:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android15-6.6' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a15-6-6.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android15/6.6.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
       build_bypass: ${{ inputs.build_bypass }}
+      apply_custom_patches: ${{ inputs.apply_custom_patches }}
+      disable_werror: ${{ inputs.disable_werror }}
 
   # ==================== Android 16 - 6.12 构建 ====================
   build-a16-6-12:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android16-6.12' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a16-6-12.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android16/6.12.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
       build_bypass: ${{ inputs.build_bypass }}
+      apply_custom_patches: ${{ inputs.apply_custom_patches }}
+      disable_werror: ${{ inputs.disable_werror }}
 
   # ==================== Android 17 - 6.18 构建 ====================
   build-a17-6-18:
     if: ${{ !inputs.build_kernel_version && (inputs.build_target == 'android17-6.18' || inputs.build_target == 'all') }}
     needs: resolve-ksu-ref
-    uses: ./.github/workflows/kernel-a17-6-18.yml
+    uses: ./.github/workflows/build-kmi.yml
     secrets: inherit
     with:
+      data_file: data/android17/6.18.json
+      deduplicate_sublevels: true
       clean_build: ${{ inputs.clean_build }}
+      disable_bakasu: ${{ inputs.disable_bakasu }}
       kernelsu_branch: ${{ needs.resolve-ksu-ref.outputs.sha || 'main' }}
       version: ${{ inputs.version }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
       use_bbg: ${{ inputs.use_bbg }}
       use_rekernel: ${{ inputs.use_rekernel }}
-      cve_2026_43499_patch: ${{ inputs.cve_2026_43499_patch }}
       cancel_susfs: ${{ inputs.cancel_susfs }}
+      supp_op: ${{ inputs.supp_op }}
       droidspaces: ${{ inputs.droidspaces }}
       droidspaces_ntsync: ${{ inputs.droidspaces_ntsync }}
       use_nomount: ${{ inputs.use_nomount }}
       build_bypass: ${{ inputs.build_bypass }}
+      apply_custom_patches: ${{ inputs.apply_custom_patches }}
+      disable_werror: ${{ inputs.disable_werror }}
 
   # ==================== 收集补丁冲突文件 ====================
   # 汇总所有构建任务中的 .rej 文件，方便调试补丁问题
@@ -490,7 +556,8 @@ jobs:
       REPO_OWNER: ${{ github.repository_owner }}
       REPO_NAME: ${{ github.event.repository.name }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      NOTIFY_SUSFS_STATUS: ${{ inputs.clean_build != true && inputs.cancel_susfs != true && inputs.build_target == 'android17-6.18' && 'auto-skipped (Android 17/6.18)' || inputs.clean_build != true && inputs.cancel_susfs != true && inputs.build_target == 'all' && 'enabled (Android 17/6.18 auto-skipped)' || inputs.clean_build != true && inputs.cancel_susfs != true && 'true' || 'false' }}
+      BUILD_MODE: ${{ inputs.clean_build && 'Clean' || inputs.disable_bakasu && 'NoKSU' || 'BakaSU' }}
+      NOTIFY_SUSFS_STATUS: ${{ inputs.clean_build != true && inputs.disable_bakasu != true && inputs.cancel_susfs != true && inputs.build_target == 'android17-6.18' && 'auto-skipped (Android 17/6.18)' || inputs.clean_build != true && inputs.disable_bakasu != true && inputs.cancel_susfs != true && inputs.build_target == 'all' && 'enabled (Android 17/6.18 auto-skipped)' || inputs.clean_build != true && inputs.disable_bakasu != true && inputs.cancel_susfs != true && 'true' || 'false' }}
       NOTIFY_ZRAM_STATUS: ${{ inputs.clean_build != true && inputs.use_zram && inputs.build_target == 'android17-6.18' && 'auto-skipped (Android 17/6.18)' || inputs.clean_build != true && inputs.use_zram && inputs.build_target == 'all' && 'enabled (Android 17/6.18 auto-skipped)' || inputs.clean_build != true && inputs.use_zram && 'true' || 'false' }}
       NOTIFY_REKERNEL_STATUS: ${{ inputs.clean_build != true && inputs.use_rekernel && inputs.build_target == 'android17-6.18' && 'auto-skipped (Android 17/6.18)' || inputs.clean_build != true && inputs.use_rekernel && inputs.build_target == 'all' && 'enabled (Android 17/6.18 auto-skipped)' || inputs.clean_build != true && inputs.use_rekernel && 'true' || 'false' }}
 
@@ -509,7 +576,11 @@ jobs:
             echo "MOUNT_TYPE=" >> "$GITHUB_ENV"
             echo "BRANCH_INFO=" >> "$GITHUB_ENV"
           else
-            KSU_NAME="BakaSU"
+            if [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+              KSU_NAME="NoKSU"
+            else
+              KSU_NAME="BakaSU"
+            fi
             echo "BBG_STATUS=${{ inputs.use_bbg && '支持' || '不支持' }}" >> "$GITHUB_ENV"
             LZ4_STATUS="${{ inputs.use_zram && '开启' || '未开启' }}"
             LZ4_SUFFIX="${{ inputs.use_zram && '、LZ4KD' || '' }}"
@@ -524,10 +595,14 @@ jobs:
             echo "LZ4_STATUS=$LZ4_STATUS" >> "$GITHUB_ENV"
             echo "LZ4_SUFFIX=$LZ4_SUFFIX" >> "$GITHUB_ENV"
 
-            if [ "${{ inputs.cancel_susfs }}" = "true" ]; then
+            if [ "${{ inputs.cancel_susfs }}" = "true" ] || [ "${{ inputs.disable_bakasu }}" = "true" ]; then
               RELEASE_NAME="GKI内核: ${KSU_NAME}"
               echo "SUSFS_SUFFIX=" >> "$GITHUB_ENV"
-              echo "SUSFS_STATUS=未集成 / Not included" >> "$GITHUB_ENV"
+              if [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+                echo "SUSFS_STATUS=未集成（BakaSU 已禁用） / Not included (BakaSU disabled)" >> "$GITHUB_ENV"
+              else
+                echo "SUSFS_STATUS=未集成 / Not included" >> "$GITHUB_ENV"
+              fi
               echo "HOOK_TYPE=" >> "$GITHUB_ENV"
               echo "MOUNT_TYPE=" >> "$GITHUB_ENV"
             elif [ "${{ inputs.build_target }}" = "android17-6.18" ]; then
@@ -549,10 +624,14 @@ jobs:
             fi
 
             if [ "${{ inputs.build_target }}" = "all" ] || [ "${{ inputs.build_target }}" = "android17-6.18" ]; then
-              echo "COMPATIBILITY_NOTE=Android 17 / 6.18 自动跳过 SUSFS、ZRAM/LZ4KD、NTSync、Re-Kernel、一加 8E 专用补丁和 CVE-2026-43499 修复链。" >> "$GITHUB_ENV"
+              echo "COMPATIBILITY_NOTE=Android 17 / 6.18 自动跳过 SUSFS、ZRAM/LZ4KD、NTSync、Re-Kernel、一加 8E 专用补丁。" >> "$GITHUB_ENV"
             fi
 
-            echo "BRANCH_INFO=(${{ inputs.kernelsu_branch || 'main' }})" >> "$GITHUB_ENV"
+            if [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+              echo "BRANCH_INFO=" >> "$GITHUB_ENV"
+            else
+              echo "BRANCH_INFO=(${{ inputs.kernelsu_branch || 'main' }})" >> "$GITHUB_ENV"
+            fi
           fi
 
           echo "KSU_NAME=$KSU_NAME" >> "$GITHUB_ENV"
@@ -584,7 +663,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: 获取 KernelSU 提交信息
-        if: inputs.clean_build != true
+        if: inputs.clean_build != true && inputs.disable_bakasu != true
         run: |
           KSU_REF="${{ needs.resolve-ksu-ref.outputs.sha }}"
           KSU_URL="https://github.com/Baka-SU/BakaSU/commit/$KSU_REF"
@@ -593,7 +672,7 @@ jobs:
           echo "KSU_URL=$KSU_URL" >> "$GITHUB_ENV"
 
       - name: 获取 SUSFS 提交信息
-        if: inputs.clean_build != true
+        if: inputs.clean_build != true && inputs.disable_bakasu != true
         run: |
           GITLAB_OWNER="simonpunk"
           GITLAB_REPO="susfs4ksu"
@@ -639,8 +718,35 @@ jobs:
           点击下方 **Assets** 展开下载 / Expand **Assets** below to download.
           EOF
 
+      - name: 生成无 BakaSU 发布说明
+        if: ${{ inputs.clean_build != true && inputs.disable_bakasu }}
+        run: |
+          cat > release_body.md << 'EOF'
+          ## GKI 内核：无 BakaSU / GKI Kernel without BakaSU
+
+          此发布未集成 BakaSU，SUSFS 已随 BakaSU 自动禁用。其他可选功能按构建表单的开关生效。
+
+          This release does not include BakaSU. SUSFS is disabled automatically with BakaSU. Other optional features follow the switches in the build form.
+
+          | 组件 / Component | 状态 / Status |
+          |:---|:---|
+          | BakaSU | 未集成 / Not included |
+          | SUSFS | 随 BakaSU 自动禁用 / Disabled with BakaSU |
+          | BBG | ${{ inputs.use_bbg && '已启用 / Enabled' || '未启用 / Not included' }} |
+          | ZRAM / LZ4KD | ${{ inputs.use_zram && '已启用 / Enabled' || '未启用 / Not included' }} |
+          | Re-Kernel | ${{ inputs.use_rekernel && '已启用 / Enabled' || '未启用 / Not included' }} |
+          | Droidspaces | ${{ inputs.droidspaces != 'off' && inputs.droidspaces || 'off' }} |
+
+          > 刷入前请备份原厂 Boot 镜像，并确认内核版本与设备兼容。
+          > Back up your stock boot image and verify kernel compatibility before flashing.
+
+          **LTO**: thin（Android 16 / 17 使用 none）
+
+          点击下方 **Assets** 展开下载 / Expand **Assets** below to download.
+          EOF
+
       - name: 生成常规发布说明
-        if: inputs.clean_build != true
+        if: inputs.clean_build != true && inputs.disable_bakasu != true
         run: |
           cat > release_body.md << EOF
           ## 📦 本次发布内容 / Release Contents
@@ -743,6 +849,8 @@ jobs:
         run: |
           if [ "${{ inputs.clean_build }}" = "true" ]; then
             SUS_VERSION="clean"
+          elif [ "${{ inputs.disable_bakasu }}" = "true" ]; then
+            SUS_VERSION="no-bakasu"
           elif [ "${{ inputs.build_target }}" = "android17-6.18" ]; then
             SUS_VERSION="no-susfs"
           else
@@ -846,13 +954,13 @@ jobs:
           Tag: <code>${NEW_TAG}</code>
           
           Features: 
-          <pre>Build mode = ${{ inputs.clean_build && 'Clean' || 'BakaSU' }}
+          <pre>Build mode = ${BUILD_MODE}
           SuSFS = $NOTIFY_SUSFS_STATUS
           BBG = ${{ inputs.clean_build != true && inputs.use_bbg && 'true' || 'false' }}
           LZ4KD = $NOTIFY_ZRAM_STATUS
           Re-Kernel = $NOTIFY_REKERNEL_STATUS
           Droidspaces = ${{ inputs.clean_build && 'off' || inputs.droidspaces }}${{ inputs.clean_build != true && inputs.build_target != 'android17-6.18' && inputs.droidspaces_ntsync && ' + NTSync' || '' }}
-          KPatch-Next Support = ${{ inputs.clean_build != true && 'true' || 'false' }}</pre>
+          KPatch-Next Support = ${{ inputs.clean_build != true && inputs.disable_bakasu != true && 'true' || 'false' }}</pre>
           Change Log: 
           <pre>${INPUT_CHANGE_LOG}
           </pre>
@@ -890,13 +998,13 @@ jobs:
           Tag: <code>${NEW_TAG}</code>
           
           Features: 
-          <pre>Build mode = ${{ inputs.clean_build && 'Clean' || 'BakaSU' }}
+          <pre>Build mode = ${BUILD_MODE}
           SuSFS = $NOTIFY_SUSFS_STATUS
           BBG = ${{ inputs.clean_build != true && inputs.use_bbg && 'true' || 'false' }}
           LZ4KD = $NOTIFY_ZRAM_STATUS
           Re-Kernel = $NOTIFY_REKERNEL_STATUS
           Droidspaces = ${{ inputs.clean_build && 'off' || inputs.droidspaces }}${{ inputs.clean_build != true && inputs.build_target != 'android17-6.18' && inputs.droidspaces_ntsync && ' + NTSync' || '' }}
-          KPatch-Next Support = ${{ inputs.clean_build != true && 'true' || 'false' }}</pre>
+          KPatch-Next Support = ${{ inputs.clean_build != true && inputs.disable_bakasu != true && 'true' || 'false' }}</pre>
           Change Log: 
           <pre>${INPUT_CHANGE_LOG}
           </pre>
